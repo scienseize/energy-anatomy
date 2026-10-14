@@ -1,0 +1,8 @@
+name: NVIDIA T4
+peak_flops:            # FLOP/s
+  fp32: 8.1e+12         # CUDA cores; Turing has no TF32, so FP32 matmuls run here too
+  fp16: 16.2e+12        # CUDA cores, half2 (2x FP32): elementwise ops in FP16
+  fp16_tensor: 65.0e+12 # tensor cores: matmuls in FP16 only
+bandwidth: 320.0e+9     # B/s, GDDR6
+l2_bytes: 4194304      # 4 MiB
+power_cap_w: 70

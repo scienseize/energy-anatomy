@@ -1,0 +1,27 @@
+[project]
+name = "anatomy"
+version = "0.1.0"
+description = "Roofline-based energy anatomy of transformer pretraining components (Pythia on T4)"
+authors = [{ name = "scienseize" }]
+requires-python = ">=3.11"
+dependencies = [
+    "torch>=2.4",
+    "pyyaml>=6",
+    "matplotlib>=3.8",
+]
+
+[project.scripts]
+anatomy = "anatomy.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "transformers>=4.44",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.17,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

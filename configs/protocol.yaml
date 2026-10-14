@@ -1,0 +1,8 @@
+warmup_iters: 20
+passes: 10
+min_window_s: 2.0
+buffer_l2_multiple: 4     # rotating input sets total > 4 x L2
+min_buffers: 2
+idle_window_s: 10
+idle_every_min: 30
+throttle_drop: 0.10       # flag a pass if SM clock < 90% of pass 1

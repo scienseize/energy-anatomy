@@ -68,7 +68,8 @@ Each substitution replaces exactly one baseline unit, keeps its call signature, 
 | gqa_proj | attn_proj | Fused projection `Linear(d, d + 2 * kv_heads * hd)` with kv_heads = heads / 4 (3, 4 and 8 for the three models), the K/V repeat to all heads materialized as in HF `repeat_kv` (expand + reshape, a real copy), and the output `Linear(d, d)`. Biases as in the baseline. |
 | factorized_embed (in) | embed_lookup | ALBERT style (Lan et al., 2020): `Embedding(V, E)` + `Linear(E, d)`, E = 128, no bias. |
 | factorized_embed (out) | out_proj | Mirrored: `Linear(d, E)` + `Linear(E, V)`, E = 128, no bias (like Pythia's embed_out). |
-| rmsnorm | ln (all 2L + 1) | Zhang and Sennrich (2019): `x * rsqrt(mean(x^2) + eps) * w`, eager ops in the run dtype. |
+| rmsnorm | ln (all 2L + 1) | Zhang and Sennrich (2019): `x * rsqrt(mean(x^2) + eps) * w`, eager ops in the run dtype (six separate operators, as in HF's Llama RMSNorm). |
+| rmsnorm_fused | ln (all 2L + 1) | The same function through `F.rms_norm`, which dispatches to PyTorch's fused CUDA kernel where the build has one (added 2026-10-17; Section 16). The Kaggle notebook logs which operators actually ran. |
 
 The RQ5 metric is delta E_model = E_total(baseline) - E_total(with the substitution swapped in), as a percentage of baseline, per configuration.
 
@@ -82,6 +83,7 @@ FLOPs and bytes are not written out by hand per component. Each unit's real modu
 
 - View and aliasing operators (`is_view`, `_unsafe_view`) and pure allocations (`new_empty_strided`) move no data and are skipped.
 - An operator without a FLOP rule stops the run with an error, so no operator is ever silently counted as zero.
+- **Exception: rmsnorm_fused** is counted by formula, because on the meta device `F.rms_norm` decomposes into eager operators and tracing cannot see the fused CUDA kernel. It is counted like `native_layer_norm`: one operator forward (reads x and w, writes y and an fp32 rstd per row) and one backward (reads dy, x, w and rstd, writes dx and dw), with 4 FLOPs per element forward and 9 backward.
 
 ### 4.2 Bytes
 
@@ -172,7 +174,7 @@ The first session runs a smoke test (`SMOKE = True`): one 160M configuration int
 
 ## 8. Verification
 
-`uv run pytest` (43 tests):
+`uv run pytest` (46 tests):
 
 | Test | What it establishes |
 |---|---|
@@ -197,6 +199,8 @@ The first session runs a smoke test (`SMOKE = True`): one 160M configuration int
 | test_select_session_takes_the_complete_run | Per configuration, the analysis keeps the session that covers every unit and pass, and fails if none does. |
 | test_share_identities | On the measured data, per configuration and pass: sum C3 + Unattributed = 1, sum C4 = -Unattributed, and the component-normalized C3 sums to 1, for total and dynamic energy. |
 | test_summary_invariant_to_row_order | Shuffling the raw rows changes no median and no rank. |
+| test_substitution_delta_by_hand | The substituted model total and delta % equal the hand calculation, with negative meaning the substitution costs more; unmeasured substitutions are skipped. |
+| test_rmsnorm_fused_matches_eager | The fused and eager RMSNorm units compute the same function. |
 | test_refuses_to_append_under_a_different_header | An output file with a different column layout stops the run and is left untouched. |
 
 Verified on the T4 by the smoke test (Section 12): the Zeus energy counter, the NVML/CUDA device pinning, the memory-efficient attention kernel, and the full harness on one configuration. Not yet verified on the T4: the in-window NVML sampling and the pre-conditioning added after the smoke test (next Kaggle session), and the GPU-specific operator decomposition.
@@ -247,7 +251,7 @@ Observations for the Results and Discussion chapter:
 
 ```
 uv sync                        # Python 3.11 env from uv.lock
-uv run pytest                  # 43 tests
+uv run pytest                  # 46 tests
 uv run anatomy analyze         # shares, C4, decision rule: T4-T7, TA1-TA2, F5, F7
 uv run anatomy analytical      # data/derived/analytical.csv
 uv run anatomy report          # data/tables/T2.*, data/figures/F6.*
@@ -373,3 +377,16 @@ Observations for the Results and Discussion chapter:
 - **Unattributed** ranges from -6.7% (6.9B/512/FP16) to +4.3% (160M/1024/FP16), with a median of +0.2%. It is negative in 8 configurations: all six 6.9B configurations and 1.4B FP32 at 512 and 1024. It is positive in every FP16 configuration of 160M and 1.4B (+1.7% to +4.3%). See limitation 10.
 
 **Validation (T4).** The analytical model ranks the 8 components almost exactly as measured. Spearman rho is 1.0 in 12 configurations, 0.976 in 5 (all FP16) and 0.952 at 6.9B/2048/FP16. The median absolute difference between analytical and measured component-normalized C3 is 0.008. The largest differences are for attn_core (median 0.042, at most 0.151 at 160M/1024/FP16) and mlp (median 0.055, at most 0.099). The analytical model gets the ordering right but not the size of attn_core's share, which is the quantity the measurement exists to provide.
+
+## 16. Substitution analysis method
+
+Implemented in `src/anatomy/analysis.py` (`substitution_deltas`, `summarize_substitutions`, `priority_table`); runs as part of `anatomy analyze`. Outputs: `data/derived/substitutions.csv` (per pass), tables T9 and T10, figure F10.
+
+1. **Same session.** Substitution units are taken from the same session as the baseline of that configuration (Section 14, step 1). A substitution not measured in that session is skipped, not borrowed from another session, because absolute energy shifts between sessions (Section 12.2).
+2. **Swapped model total, per matched pass** (DESIGN section 5). E_total,sub = E_total,base - sum over replaced units of (E_replaced x count) + sum over substitute units of (E_sub x count), where E_total,base is the baseline total of Section 14 for the same pass j. factorized_embed swaps its in and out units together (embed_lookup and out_proj). The rmsnorm variants replace all 2L + 1 norms.
+3. **Saving.** delta % = (E_total,base - E_total,sub) / E_total,base x 100. Positive means the substitution saves energy. The table reports the median and IQR (linear) over passes, the replaced units' share of the baseline total, the substitute's share of the substituted total, and whether the substitute is memory-bound (analytical).
+4. **Additivity assumption.** The substituted total is computed by swapping isolated-unit energies, not by measuring a full block with the substitution inside. Unattributed energy is therefore assumed unchanged by the substitution.
+5. **Short window** (decided 2026-10-17). The one `short_window` pass (factorized_embed_out, 1.4B/2048/FP16, pass 3, 1.991 s) is kept, flagged. Its matched set is not dropped.
+6. **T9** lists, per substitution, the priority component it replaces, that component's H1 verdict, its C4 range and C4 rank range (computed), and the mechanism and source (from `data/manual/substitutions.csv`, curated by hand). **T10's `published_value`** also comes from that file. It stays blank until a published figure is entered by hand, and no value is ever filled in by the code.
+
+**Why rmsnorm_fused was added (2026-10-17).** In the first full run, the eager rmsnorm cost more model energy than LayerNorm in all 18 configurations (delta -0.5% to -4.4%). The analytical model shows why: the eager version moves about 6 times the bytes of the fused LayerNorm kernel (for example 2.01 GB against 0.34 GB per call at 1.4B/2048/FP32), because each of its six operators makes a full round-trip to HBM. That compares an eager implementation with a fused one, not the RMSNorm algorithm with the LayerNorm algorithm. rmsnorm_fused computes the same function in one kernel (0.34 GB analytically), so the pair separates the algorithm from the implementation. Adding it required rerunning the full grid in one session, because a unit measured in a later session cannot be compared with a baseline from an earlier one (Section 12.2).

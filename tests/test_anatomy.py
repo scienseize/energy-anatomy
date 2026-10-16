@@ -143,3 +143,10 @@ def test_substitution_shapes_and_gqa_heads():
 
         with torch.device("meta"):
             assert GqaProj(load_model(name)).kvh == kvh
+
+
+def test_rmsnorm_fused_matches_eager():
+    from anatomy.substitutions import RMSNorm, RMSNormFused
+
+    x = torch.randn(2, 16, 64)
+    torch.testing.assert_close(RMSNormFused(64, 1e-5)(x), RMSNorm(64, 1e-5)(x))

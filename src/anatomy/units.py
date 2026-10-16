@@ -16,6 +16,7 @@ SUBSTITUTIONS = {
     "factorized_embed_in": ("factorized_embed", "embed_lookup"),
     "factorized_embed_out": ("factorized_embed", "out_proj"),
     "rmsnorm": ("rmsnorm", "ln"),
+    "rmsnorm_fused": ("rmsnorm_fused", "ln"),
 }
 UNITS = (*COMPONENTS, *SUBSTITUTIONS, "block")
 
@@ -50,6 +51,7 @@ def _module(unit: str, m: ModelSpec, seq: int) -> nn.Module:
         "factorized_embed_in": lambda: S.FactorizedEmbedIn(m),
         "factorized_embed_out": lambda: S.FactorizedEmbedOut(m),
         "rmsnorm": lambda: S.RMSNorm(m.d, m.eps),
+        "rmsnorm_fused": lambda: S.RMSNormFused(m.d, m.eps),
     }[unit]()
 
 
@@ -73,7 +75,7 @@ def make_inputs(unit: str, run: RunSpec, device) -> tuple[torch.Tensor, ...]:
         return act(*heads), act(*heads), act(*heads)
     if unit == "loss":
         return act(b, s, m.vocab), ids()
-    return (act(b, s, m.d),)  # ln, rmsnorm, mlp, out_proj, factorized_embed_out, block
+    return (act(b, s, m.d),)  # ln, rmsnorm(_fused), mlp, out_proj, factorized_embed_out, block
 
 
 def build(unit: str, run: RunSpec, device="cpu"):

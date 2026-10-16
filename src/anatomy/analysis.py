@@ -15,13 +15,15 @@ import numpy as np
 
 from anatomy.config import DATA
 from anatomy.report import write_table
-from anatomy.units import COMPONENTS
+from anatomy.units import COMPONENTS, SUBSTITUTIONS
 
 RAW, DERIVED = DATA / "raw", DATA / "derived"
 TESTED = ("embed_lookup", "ln", "rope", "attn_core")  # H1 components; ln is pooled with the final norm
 USABLE = ("ok", "short_window")  # short windows are kept (flagged); oom rows carry no energy
 MODEL_ORDER = ("pythia-160m", "pythia-1.4b", "pythia-6.9b")
 COMP_ORDER = (*COMPONENTS, "unattributed")
+SUB_ORDER = tuple(dict.fromkeys(sub for sub, _ in SUBSTITUTIONS.values()))
+MANUAL = DATA / "manual" / "substitutions.csv"
 
 
 def grid_order(r: dict) -> tuple:
@@ -76,12 +78,10 @@ def _idle_lookup(idle: list[dict]):
     return power
 
 
-def per_pass(passes: list[dict], idle: list[dict], analytical: list[dict], n_passes: int) -> list[dict]:
-    """One row per (config, component|unattributed, pass): C3 and C4 on total and dynamic energy.
-    Pass j of every unit in a config forms one matched set (DESIGN §8)."""
-    an = {(r["model"], int(r["seq_len"]), r["precision"], r["component"]): r for r in analytical}
+def _energy(passes: list[dict], idle: list[dict]) -> dict:
+    """(config, unit) -> pass -> (total J per rep, dynamic J per rep), usable passes only."""
     idle_w = _idle_lookup(idle)
-    e = defaultdict(dict)  # (cfg, unit) -> pass -> (total J/rep, dynamic J/rep)
+    e = defaultdict(dict)
     for r in passes:
         if r["status"] not in USABLE:
             continue
@@ -89,7 +89,20 @@ def per_pass(passes: list[dict], idle: list[dict], analytical: list[dict], n_pas
         dyn = joules - idle_w(r["run_id"], r["ts"]) * t
         cfg = (r["model"], int(r["seq_len"]), r["precision"])
         e[(cfg, r["unit"])][int(r["pass_idx"])] = (joules / reps, dyn / reps)
+    return e
 
+
+def _model_total(e: dict, cfg, j: int, k: int, layers: int) -> float:
+    """E_total = L x E_block + E_embed + E_final_norm + E_out_proj + E_loss. The final norm is one ln
+    instance; the other 2L ln instances live inside the blocks."""
+    return layers * e[(cfg, "block")][j][k] + sum(e[(cfg, c)][j][k] for c in ("embed_lookup", "ln", "out_proj", "loss"))
+
+
+def per_pass(passes: list[dict], idle: list[dict], analytical: list[dict], n_passes: int) -> list[dict]:
+    """One row per (config, component|unattributed, pass): C3 and C4 on total and dynamic energy.
+    Pass j of every unit in a config forms one matched set (DESIGN §8)."""
+    an = {(r["model"], int(r["seq_len"]), r["precision"], r["component"]): r for r in analytical}
+    e = _energy(passes, idle)
     out = []
     for cfg in sorted({c for c, _ in e}):
         count = {c: int(an[(*cfg, c)]["count_per_model"]) for c in COMPONENTS}
@@ -100,9 +113,7 @@ def per_pass(passes: list[dict], idle: list[dict], analytical: list[dict], n_pas
                 continue  # incomplete matched set (oom): drop pass j for this config
             for k, kind in ((0, ""), (1, "_dyn")):
                 ec = {c: e[(cfg, c)][j][k] * count[c] for c in COMPONENTS}
-                # final norm = one ln instance; the other 2L ln instances live inside the blocks
-                total = layers * e[(cfg, "block")][j][k] + sum(
-                    e[(cfg, c)][j][k] for c in ("embed_lookup", "ln", "out_proj", "loss"))
+                total = _model_total(e, cfg, j, k, layers)
                 for c in COMPONENTS:
                     c3 = ec[c] / total
                     out.append({"model": cfg[0], "seq_len": cfg[1], "precision": cfg[2], "component": c,
@@ -210,6 +221,81 @@ def validate(summary: list[dict], analytical: list[dict]) -> list[dict]:
     return out
 
 
+def substitution_deltas(passes: list[dict], idle: list[dict], analytical: list[dict], n_passes: int) -> list[dict]:
+    """RQ5 per pass (DESIGN section 5): E_total with a substitution swapped in =
+    E_total(baseline) - sum(replaced unit energy x count) + sum(substitute energy x count),
+    on matched passes. delta_pct = (baseline - substituted) / baseline x 100, positive = saving.
+    factorized_embed swaps its in and out units together."""
+    an = {(r["model"], int(r["seq_len"]), r["precision"], r["component"]): r for r in analytical}
+    e = _energy(passes, idle)
+    groups = defaultdict(list)
+    for unit, (sub, replaced) in SUBSTITUTIONS.items():
+        groups[sub].append((unit, replaced))
+    out = []
+    for cfg in dict.fromkeys(c for c, _ in e):
+        layers = int(an[(*cfg, "block")]["count_per_model"])
+        count = lambda u: int(an[(*cfg, u)]["count_per_model"])
+        for j in range(n_passes):
+            if any(j not in e[(cfg, u)] for u in (*COMPONENTS, "block")):
+                continue
+            base = _model_total(e, cfg, j, 0, layers)
+            for sub, members in groups.items():
+                if any(j not in e.get((cfg, u), {}) for u, _ in members):
+                    continue  # substitution not measured in this session (e.g. added later)
+                removed = sum(e[(cfg, rep)][j][0] * count(rep) for _, rep in members)
+                added = sum(e[(cfg, u)][j][0] * count(u) for u, _ in members)
+                total = base - removed + added
+                out.append({"model": cfg[0], "seq_len": cfg[1], "precision": cfg[2], "substitution": sub,
+                            "replaces": "+".join(rep for _, rep in members), "pass_idx": j,
+                            "e_total_base_j": base, "e_total_sub_j": total,
+                            "delta_pct": (base - total) / base * 100,
+                            "replaced_c3": removed / base, "sub_c3": added / total})
+    return out
+
+
+def summarize_substitutions(deltas: list[dict], analytical: list[dict], manual: dict) -> list[dict]:
+    """T10: per (config, substitution) medians over passes, IQR of the saving, and the published
+    value from data/manual/substitutions.csv (left blank until filled by hand)."""
+    an = {(r["model"], int(r["seq_len"]), r["precision"], r["component"]): r for r in analytical}
+    g = defaultdict(list)
+    for r in deltas:
+        g[(r["model"], r["seq_len"], r["precision"], r["substitution"], r["replaces"])].append(r)
+    out = []
+    for (m, s, p, sub, rep), rs in g.items():
+        units = [u for u, (x, _) in SUBSTITUTIONS.items() if x == sub]
+        d = [r["delta_pct"] for r in rs]
+        out.append({"model": m, "seq_len": s, "precision": p, "substitution": sub, "replaces": rep,
+                    "n_passes": len(rs),
+                    "e_total_base_j": float(np.median([r["e_total_base_j"] for r in rs])),
+                    "e_total_sub_j": float(np.median([r["e_total_sub_j"] for r in rs])),
+                    "delta_pct_med": float(np.median(d)), "delta_pct_iqr": iqr(d),
+                    "replaced_c3_med": float(np.median([r["replaced_c3"] for r in rs])),
+                    "sub_c3_med": float(np.median([r["sub_c3"] for r in rs])),
+                    "sub_memory_bound": "+".join(an[(m, s, p, u)]["memory_bound"] for u in units),
+                    "published_value": manual.get(sub, {}).get("published_value", "")})
+    return sorted(out, key=lambda r: (grid_order(r), SUB_ORDER.index(r["substitution"])))
+
+
+def priority_table(summary: list[dict], rule: list[dict], manual: dict) -> list[dict]:
+    """T9: priority component -> mechanism -> substitution -> source. Waste columns are computed;
+    mechanism and source come from data/manual/substitutions.csv."""
+    verdict = {r["component"]: r["verdict"] for r in rule}
+    out = []
+    for sub in SUB_ORDER:  # listed even before measurement: T9 is the plan, T10 the outcome
+        replaced = list(dict.fromkeys(rep for x, rep in SUBSTITUTIONS.values() if x == sub))
+        def rng(c, key, f):
+            v = [r[key] for r in summary if r["component"] == c]
+            return f"{f(min(v))} to {f(max(v))}"
+
+        mm = manual.get(sub, {})
+        out.append({"priority_component": "; ".join(replaced),
+                    "h1_verdict": "; ".join(verdict.get(c, "reported only") for c in replaced),
+                    "c4_med_range": "; ".join(rng(c, "c4_med", lambda x: f"{x:+.4f}") for c in replaced),
+                    "rank_c4_range": "; ".join(rng(c, "rank_c4", str) for c in replaced),
+                    "mechanism": mm.get("mechanism", ""), "substitution": sub, "source": mm.get("source", "")})
+    return out
+
+
 def _write(path: Path, rows: list[dict]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", newline="") as f:
@@ -253,4 +339,12 @@ def run(passes_csv: Path = RAW / "passes.csv", idle_csv: Path = RAW / "idle.csv"
     for name, rows in (("T4", t4), ("T5", t5), ("T6", t6), ("T7", t7), ("TA1_dynamic", ta),
                        ("TA2_dynamic_rule", ta_rule), ("TA3_normalized_rule", tn_rule)):
         write_table(name, _fmt(rows))
-    return {"summary": summary, "t4": t4, "t6": t6, "t6_dynamic": ta_rule, "t6_normalized": tn_rule}
+    manual = {r["substitution"]: r for r in _read(MANUAL)} if MANUAL.exists() else {}
+    deltas = substitution_deltas(passes, _read(idle_csv), analytical, n_passes)
+    t10 = summarize_substitutions(deltas, analytical, manual)
+    t9 = priority_table(summary, t6, manual)
+    _write(DERIVED / "substitutions.csv", deltas)
+    write_table("T9", _fmt(t9))
+    write_table("T10", _fmt(t10))
+    return {"summary": summary, "t4": t4, "t6": t6, "t6_dynamic": ta_rule, "t6_normalized": tn_rule,
+            "t9": t9, "t10": t10}

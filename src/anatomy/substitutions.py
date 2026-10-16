@@ -105,3 +105,16 @@ class RMSNorm(nn.Module):
 
     def forward(self, x):
         return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps) * self.weight
+
+
+class RMSNormFused(nn.Module):
+    """Same function as RMSNorm through F.rms_norm, which dispatches to PyTorch's fused CUDA kernel
+    where the build has one (the Kaggle notebook logs which ops actually ran)."""
+
+    def __init__(self, d: int, eps: float):
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(d))
+        self.eps = eps
+
+    def forward(self, x):
+        return F.rms_norm(x, (x.shape[-1],), self.weight, self.eps)

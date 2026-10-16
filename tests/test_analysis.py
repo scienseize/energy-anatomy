@@ -79,3 +79,23 @@ def test_summary_invariant_to_row_order(measured):
     again = A.summarize(A.per_pass(shuffled, idle, an, 10), an, shuffled)
     assert [r["rank_c4"] for r in base] == [r["rank_c4"] for r in again]
     assert np.allclose([r["c3_med"] for r in base], [r["c3_med"] for r in again])
+
+
+def test_substitution_delta_by_hand():
+    """One config, one pass: E_total = L*block + embed + ln + out_proj + loss; swapping ln (count 2L+1)
+    for rmsnorm changes it by (2L+1) * (E_ln - E_rms). Substitutions not measured are skipped."""
+    L = 2
+    energy = {"block": 10.0, "embed_lookup": 1.0, "ln": 0.5, "attn_proj": 2.0, "rope": 0.2, "attn_core": 3.0,
+              "mlp": 4.0, "out_proj": 2.0, "loss": 1.0, "rmsnorm": 0.75}
+    count = {"ln": 2 * L + 1, "rmsnorm": 2 * L + 1, "block": L, "embed_lookup": 1, "out_proj": 1, "loss": 1,
+             "attn_proj": L, "rope": L, "attn_core": L, "mlp": L}
+    passes = [{"run_id": "r", "ts": "t", "model": "m", "seq_len": "512", "precision": "fp32", "unit": u,
+               "pass_idx": "0", "status": "ok", "reps": "1", "time_s": "1", "energy_j": str(v)} for u, v in energy.items()]
+    analytical = [{"model": "m", "seq_len": "512", "precision": "fp32", "component": u, "count_per_model": str(n)}
+                  for u, n in count.items()]
+    idle = [{"run_id": "r", "ts": "t", "avg_power_w": "0"}]
+    (row,) = A.substitution_deltas(passes, idle, analytical, 1)
+    base = L * 10.0 + 1.0 + 0.5 + 2.0 + 1.0
+    assert row["substitution"] == "rmsnorm" and row["e_total_base_j"] == pytest.approx(base)
+    assert row["e_total_sub_j"] == pytest.approx(base + (2 * L + 1) * 0.25)
+    assert row["delta_pct"] == pytest.approx(-(2 * L + 1) * 0.25 / base * 100)  # negative = costs more

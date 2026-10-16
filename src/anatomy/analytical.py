@@ -110,7 +110,23 @@ class Counter(TorchDispatchMode):
         return out
 
 
+RMS_FWD, RMS_BWD = 4, 9  # fused RMSNorm FLOPs per element: x^2, sum, x*rstd, *w; dx (7) + dw (2)
+
+
+def _fused_rms(run: RunSpec) -> Count:
+    """rmsnorm_fused by formula: on the meta device F.rms_norm decomposes into eager ops, so tracing
+    cannot see the fused CUDA kernel. Counted like native_layer_norm: one op forward, one backward,
+    rstd saved in fp32."""
+    p, n, d = run.dtype.itemsize, run.tokens, run.model.d
+    e = n * d
+    fwd = (e + d) * p + e * p + n * 4  # x, w -> y, rstd
+    bwd = (2 * e + d) * p + n * 4 + (e + d) * p  # dy, x, w, rstd -> dx, dw
+    return Count(ew_flops=(RMS_FWD + RMS_BWD) * e, bytes=fwd + bwd)
+
+
 def count(unit: str, run: RunSpec) -> Count:
+    if unit == "rmsnorm_fused":
+        return _fused_rms(run)
     mod, inputs, grads = build(unit, run, "meta")
     with Counter() as ctr:
         step(mod, inputs, grads)

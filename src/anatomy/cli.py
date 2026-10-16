@@ -33,6 +33,7 @@ def main() -> None:
 
         report.f5()
         report.f7()
+        report.f10()
         for r in res["t6"]:
             print(f"{r['component']:13s} {r['both']}/{r['memory_bound']} memory-bound configs -> {r['verdict']}")
     elif args.cmd == "profile":

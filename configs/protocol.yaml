@@ -5,4 +5,7 @@ buffer_l2_multiple: 4     # rotating input sets total > 4 x L2
 min_buffers: 2
 idle_window_s: 10
 idle_every_min: 30
-throttle_drop: 0.10       # flag a pass if SM clock < 90% of pass 1
+throttle_drop: 0.10       # flag a pass if its mean SM clock < 90% of the GPU's max SM clock
+precondition_max_s: 300  # session start: matmuls until temperature plateaus, at most 5 min
+precondition_step_s: 30
+precondition_tol_c: 1    # plateau = < 1 C change over one step

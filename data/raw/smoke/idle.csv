@@ -1,0 +1,2 @@
+run_id,ts,energy_j,time_s,avg_power_w,sm_clock_mhz,mem_clock_mhz,temp_c,power_limit_w
+20cd96fc,2026-10-16T09:40:51+00:00,312.37400000000025,10.003416776657104,31.22673052360695,585,5000,56,70.0

@@ -121,7 +121,7 @@ For each (config, unit), where unit ∈ components ∪ substitutions ∪ {block}
 2. **Warm-up**: run W fwd+bwd iterations (default 20) and discard them.
 3. **Calibrate repetitions R** so that one measured window lasts ≥ T_min (default 2 s), since the NVML counter updates far more slowly than layer norm runs (Jain et al., 2025 amplification).
 4. **Measure N passes** (default 10). Each pass: `torch.cuda.synchronize()` → `monitor.begin_window()` → R × (forward on buffer i mod K, `backward(grad_output)`, `param.grad = None`) → `synchronize()` → `end_window()`. Record energy_J, time_s, energy per rep = energy_J / R, and avg power.
-5. Record context per pass: GPU clocks (SM, mem), temperature, power limit, torch/CUDA versions, and a throttle flag if clocks drop more than 10% from pass 1.
+5. Record context per pass: GPU clocks (SM, mem), temperature, power limit, torch/CUDA versions, and a throttle flag if clocks drop more than 10% from pass 1. *Revised 2026-10-16 (decision 17): clocks, temperature and NVML throttle reasons are sampled every 0.1 s during the window, and `throttled` is judged against the GPU's maximum SM clock.*
 6. **Idle baseline**: a 10 s idle window at session start and every 30 min. Shares use **total** energy; dynamic shares (total − idle power × window time) are computed as a sensitivity check (appendix table).
 
 Kaggle constraints: there's no root, so clocks can't be locked. Clocks are recorded instead, and throttled passes are flagged, not dropped. Sessions end after 12 h, so the runner appends each pass to `passes.csv` immediately and `--resume` skips (config, unit, pass) rows already done. A CUDA OOM on any unit is logged as `status=oom` and skipped, never silently dropped.
@@ -160,9 +160,9 @@ Sanity outputs written alongside: Σ C2 = 1, Σ C3 + Unattributed = 1, Σ C4 ove
 ## 9. Data schemas
 
 `data/raw/passes.csv` (append-only):
-`run_id, ts, model, seq_len, precision, tokens, unit, unit_kind{component|substitution|block}, pass_idx, reps, energy_j, time_s, energy_per_rep_j, avg_power_w, sm_clock_mhz, mem_clock_mhz, temp_c, power_limit_w, throttled, status{ok|short_window|oom}, torch, cuda, driver, git_sha` (`power_limit_w` added 2026-10-16, decision 16)
+`run_id, ts, model, seq_len, precision, tokens, unit, unit_kind{component|substitution|block}, pass_idx, reps, energy_j, time_s, energy_per_rep_j, avg_power_w, sm_clock_mhz, mem_clock_mhz, temp_c, power_limit_w, throttled, throttle_reasons, status{ok|short_window|oom}, torch, cuda, driver, git_sha` (`power_limit_w` added 2026-10-16, decision 16; `throttle_reasons` added 2026-10-16, decision 17)
 
-`data/raw/idle.csv`: `run_id, ts, energy_j, time_s, avg_power_w, sm_clock_mhz, mem_clock_mhz, temp_c, power_limit_w` (decision 15)
+`data/raw/idle.csv`: `run_id, ts, energy_j, time_s, avg_power_w, sm_clock_mhz, mem_clock_mhz, temp_c, power_limit_w, throttle_reasons` (decision 15)
 
 `data/derived/analytical.csv`: `model, seq_len, precision, component, count_per_model, flops, bytes, c1, ridge, memory_bound, c2, t_hat`
 
@@ -200,6 +200,9 @@ Sanity outputs written alongside: Σ C2 = 1, Σ C3 + Unattributed = 1, Σ C4 ove
 14. ~~R calibration~~ **Decided (2026-10-16): one timed probe** (≥ 0.2 s), R = ceil(1.1 × T_min / t_rep); windows still < T_min get `status=short_window`.
 15. ~~Idle storage~~ **Decided (2026-10-16): separate `data/raw/idle.csv`.**
 16. ~~Power limit column~~ **Decided (2026-10-16): add `power_limit_w` to passes.csv.**
+17. ~~Throttle detection~~ **Decided (2026-10-16, after the smoke test): sample NVML every 0.1 s in each window; record mean clocks, max temperature and the OR of clocks-event reasons (`throttle_reasons`); `throttled` = mean SM clock < 90% of the max SM clock.** The smoke test showed the T4 at its 70 W cap in every unit, with pass 0 already throttled.
+18. ~~Cool session start~~ **Decided (2026-10-16): thermal pre-conditioning** at session start (matmuls until temperature changes by < 1 C over 30 s, at most 5 min), then the idle window.
+19. ~~Smoke data~~ **Decided (2026-10-16): kept in `data/raw/smoke/`**, separate from the real run (earlier schema; see docs/methods.md section 12).
 
 Implementation notes (how the code realizes the above; full detail in `docs/methods.md`): FLOPs and bytes are traced per ATen op on the meta device rather than hand-enumerated; the Section 3 layout is collapsed to one file each for components, substitutions, analytical, harness and report, plus `units.py` as the shared unit registry.
 

@@ -2,7 +2,7 @@
 
 This file records how the code in this repository produces every number used in the thesis, at the level of detail needed to write the Methodology chapter and to defend the Results and Discussion chapter. DESIGN.md is the specification; this file records what was implemented, the conventions it fixes, where it departs from the specification, and its known limitations. Section and file references point at the code that implements each statement.
 
-Status (2026-10-16): the analytical model, the tables T2 and figure F6 derived from it, and the profiling harness are implemented and tested. No energy has been measured yet. Every number in Section 9 is analytical (computed, not measured).
+Status (2026-10-16): the analytical model, the tables T2 and figure F6 derived from it, and the profiling harness are implemented and tested. One smoke-test configuration has been measured on the Kaggle T4 (Section 12). The full grid has not been measured yet. Every number in Section 9 is analytical (computed, not measured).
 
 ## 1. Scope and provenance
 
@@ -132,15 +132,16 @@ Because the elementwise constants are conventions, only the order of magnitude o
 
 Implemented in `src/anatomy/harness.py`; run with `anatomy profile [--resume]`. Protocol constants live in `configs/protocol.yaml`.
 
+0. **Thermal pre-conditioning** (decided 2026-10-16, after the smoke test). At the start of each session, before the first idle window, the harness runs FP32 4096 x 4096 matmuls in 30 s steps until the GPU temperature changes by less than 1 C over one step, or for at most 5 minutes. Every measured unit, including the first of a session, then sees the hot steady state that a real pretraining run sits in. The plateau temperature and the time taken are printed to the session log.
 1. **Order** (decided 2026-10-16). Configuration-major in grid order: all 15 units of a configuration before the next configuration, smallest model first (160M, then 1.4B, then 6.9B; within a model, seq 512 to 2048, FP32 then FP16). If a session ends early, every finished configuration is complete and can be analyzed on its own.
 2. **Build.** The module is built once per (configuration, unit) on `cuda:0` and cast to the run dtype.
 3. **Rotating buffers.** K independent (inputs, grad_outputs) sets with K = max(2, ceil(4 x 4 MiB / bytes per set)). Repetition i uses set i mod K, so consecutive repetitions never find their inputs in L2. Weights are not rotated.
 4. **Warm-up.** 20 forward + backward iterations, discarded.
 5. **Calibration** (decided 2026-10-16). A timed probe runs n = 1, 2, 4, ... repetitions between two device synchronizations until the probe lasts at least 0.2 s. Then R = ceil(1.1 x 2 s / t_rep), with a 10% margin. R is fixed for all passes of that unit in that session.
 6. **Passes.** N = 10. Each pass is: Zeus `begin_window` (synchronizes the device, then reads the NVML energy counter), R x (forward on buffer i mod K, `backward(grad_output)`, then set every parameter and input `.grad` to None, so every repetition does identical work with no gradient accumulation), and `end_window` (synchronizes, reads the counter). The row stores energy_j, time_s, energy per repetition = energy_j / R, and average power = energy_j / time_s.
-7. **Context.** After each window the harness records the SM and memory clocks, GPU temperature and enforced power limit (NVML). Kaggle grants no root, so clocks cannot be locked. Instead, a pass is flagged `throttled` if its SM clock is below 90% of the SM clock of pass 0 for that unit. Throttled passes are flagged, never dropped.
+7. **Context** (revised 2026-10-16, after the smoke test). A background thread samples NVML every 0.1 s during each window. The row stores the mean SM and memory clocks over the window, the maximum temperature, the enforced power limit, and `throttle_reasons`: the union (bitwise OR) of NVML's clocks-event reasons over all samples, written as names (`sw_power_cap`, `sw_thermal`, `hw_slowdown`, `hw_thermal`, `hw_power_brake`, `gpu_idle`, ...). Kaggle grants no root, so clocks cannot be locked. A pass is flagged `throttled` if its mean SM clock is below 90% of the GPU's maximum SM clock (NVML; 1,590 MHz on the T4). Throttled passes are flagged, never dropped. The original rule (compare with pass 0 of the same unit) was replaced because the smoke test showed pass 0 is already power-capped, so that rule flagged 5 of 150 passes while every unit after the first ran at 27 to 76% of the maximum SM clock.
 8. **Status.** `ok`; `short_window` if the measured window came in under 2 s despite calibration (kept, flagged for the analysis); `oom` if the unit ran out of GPU memory. An OOM writes one `oom` row per remaining pass, frees memory, and moves on. It is never silently dropped.
-9. **Idle baseline** (decided 2026-10-16). A 10 s idle window (device synchronized, then sleep inside a Zeus window) at the start of each session and whenever 30 minutes have passed since the last one, checked before every pass. Idle windows go to `data/raw/idle.csv`. Shares use total energy. The idle power x window time correction (dynamic energy) is an appendix sensitivity check only.
+9. **Idle baseline** (decided 2026-10-16). After pre-conditioning, a 10 s idle window (device synchronized, then sleep inside a Zeus window) at the start of each session and whenever 30 minutes have passed since the last one, checked before every pass. Idle windows go to `data/raw/idle.csv`. Shares use total energy. The idle power x window time correction (dynamic energy) is an appendix sensitivity check only.
 10. **Persistence and resume.** Every pass is appended to `passes.csv` and the file is closed immediately, so a killed session loses at most the pass in progress. With `--resume`, any (configuration, unit, pass index) already present, of any status, is skipped. A partially measured unit is rebuilt, warmed up and recalibrated, and only its missing passes are measured, so its R may differ between sessions (energy per repetition stays comparable). Without `--resume`, all passes are appended again under a new run id, for deliberate reruns.
 11. **Device identity.** Kaggle provides two T4s. The harness sets `CUDA_DEVICE_ORDER=PCI_BUS_ID` before CUDA initializes and asserts that NVML device 0 and CUDA device 0 have the same PCI bus id. That way the energy counter, the clock readings and the workload all refer to the same physical GPU.
 
@@ -159,17 +160,19 @@ The first session runs a smoke test (`SMOKE = True`): one 160M configuration int
 ## 7. Data schemas
 
 `data/raw/passes.csv` (append-only, one row per pass):
-`run_id, ts, model, seq_len, precision, tokens, unit, unit_kind{component|substitution|block}, pass_idx, reps, energy_j, time_s, energy_per_rep_j, avg_power_w, sm_clock_mhz, mem_clock_mhz, temp_c, power_limit_w, throttled, status{ok|short_window|oom}, torch, cuda, driver, git_sha`
+`run_id, ts, model, seq_len, precision, tokens, unit, unit_kind{component|substitution|block}, pass_idx, reps, energy_j, time_s, energy_per_rep_j, avg_power_w, sm_clock_mhz, mem_clock_mhz, temp_c, power_limit_w, throttled, throttle_reasons, status{ok|short_window|oom}, torch, cuda, driver, git_sha`
 
-`power_limit_w` was added to the DESIGN section 9 schema on 2026-10-16, because DESIGN section 6 requires recording the power limit. Substitution unit names in this file are `sdpa_core, linear_core, gqa_proj, factorized_embed_in, factorized_embed_out, rmsnorm`.
+`sm_clock_mhz` and `mem_clock_mhz` are window means, and `temp_c` is the window maximum (Section 6, step 7). `throttle_reasons` was added on 2026-10-16 after the smoke test. `power_limit_w` was added to the DESIGN section 9 schema on 2026-10-16, because DESIGN section 6 requires recording the power limit. Substitution unit names in this file are `sdpa_core, linear_core, gqa_proj, factorized_embed_in, factorized_embed_out, rmsnorm`.
 
-`data/raw/idle.csv`: `run_id, ts, energy_j, time_s, avg_power_w, sm_clock_mhz, mem_clock_mhz, temp_c, power_limit_w`
+`data/raw/idle.csv`: `run_id, ts, energy_j, time_s, avg_power_w, sm_clock_mhz, mem_clock_mhz, temp_c, power_limit_w, throttle_reasons`
+
+`data/raw/smoke/` holds the smoke-test files (Section 12) in the earlier schema: no `throttle_reasons` column, clocks and temperature read once right after each window, and `throttled` computed against pass 0.
 
 `data/derived/analytical.csv`: `model, seq_len, precision, component, count_per_model, flops, bytes, c1, ridge, memory_bound, c2, t_hat`. Here `flops`, `bytes` and `t_hat` are per unit instance, forward + backward. `component` holds the unit name, including substitutions and `block`.
 
 ## 8. Verification
 
-`uv run pytest` (30 tests):
+`uv run pytest` (31 tests):
 
 | Test | What it establishes |
 |---|---|
@@ -187,8 +190,9 @@ The first session runs a smoke test (`SMOKE = True`): one 160M configuration int
 | test_substitution_shapes_and_gqa_heads | Each substitution produces outputs of the same total size as the unit it replaces; kv heads are 3, 4 and 8. |
 | test_dry_run_full_grid_and_resume | The harness runs the full unit set on a tiny grid end to end with a fake monitor; resume adds nothing; a dropped last pass is redone exactly. |
 | test_oom_is_logged_and_run_continues | A unit that runs out of memory is logged as `oom` for each pass, and later units still run. |
+| test_gpu_window_samples_clocks_and_reasons | With stub NVML and Zeus objects, the GPU window averages the sampled clocks, takes the maximum temperature, and ORs the throttle-reason bits. |
 
-Not yet verified (needs the T4): the Zeus energy counter on Kaggle, the memory-efficient attention kernel on the GPU, and the GPU-specific operator decomposition. The Kaggle smoke test covers the first.
+Verified on the T4 by the smoke test (Section 12): the Zeus energy counter, the NVML/CUDA device pinning, the memory-efficient attention kernel, and the full harness on one configuration. Not yet verified on the T4: the in-window NVML sampling and the pre-conditioning added after the smoke test (next Kaggle session), and the GPU-specific operator decomposition.
 
 ## 9. Analytical outcome (before measurement)
 
@@ -225,7 +229,7 @@ Observations for the Results and Discussion chapter:
 2. **Elementwise FLOP constants are conventions** (Section 4.3); C1 for memory-bound units is meaningful only to an order of magnitude.
 3. **Analytical counts come from the meta device.** Autograd formulas are device-independent, but backend kernel choices are not observed. In particular, the stride-restoring copies autograd inserts for attention gradients are counted as traced.
 4. **Random weights.** Data-dependent power effects of trained weights are not captured.
-5. **Clocks cannot be locked on Kaggle.** Clocks are recorded per pass and throttled passes are flagged; frequency variation remains a source of variance.
+5. **The T4 is power-capped and its clocks cannot be locked.** The smoke test showed every unit drawing 63 to 70 W against the 70 W cap, with SM clocks at 27 to 76% of maximum after the first unit. Three consequences follow. Energy shares closely track time shares (power is nearly constant across units). Compute-bound units run well below the boost-clock peak that sets the analytical ridge, so measured times exceed t_hat by about 2.6 to 2.9x for matmul units. And clock state depends on recent thermal history, which pre-conditioning (Section 6, step 0) controls but cannot remove. Clocks and throttle reasons are recorded per pass, and throttled passes are flagged, not dropped.
 6. **Isolation.** Units measured in isolation see cold inputs from rotating buffers. In a real training step some inputs are warm in L2. Unattributed energy (E_total minus the sum of components) bounds the combined effect of isolation and of the work outside every component.
 7. **Measurement windows span R repetitions** (at least 2 s), because the NVML energy counter updates far more slowly than a single small kernel runs. Energy per repetition is an average over the window, not a per-kernel reading.
 8. **Expected OOM at the largest configurations.** The 6.9B block in FP32 at seq 2048 holds several float32 attention-score tensors of about 2 GB each and is expected to exceed 16 GB. If it does, that configuration has no block measurement. It is logged as `oom` and must be reported as a gap, not interpolated.
@@ -235,9 +239,47 @@ Observations for the Results and Discussion chapter:
 
 ```
 uv sync                        # Python 3.11 env from uv.lock
-uv run pytest                  # 30 tests
+uv run pytest                  # 31 tests
 uv run anatomy analytical      # data/derived/analytical.csv
 uv run anatomy report          # data/tables/T2.*, data/figures/F6.*
 uv run anatomy profile --dry-run   # harness end to end on CPU, fake energy, temp dir
 ```
 On Kaggle: run `notebooks/kaggle_profile.ipynb` (Section 6.1). Results land in `/kaggle/working/raw/` and are copied into `data/raw/` in the repository.
+
+## 12. Smoke test on the Kaggle T4 (2026-10-16)
+
+One configuration (Pythia 160M, seq 512, FP32), all 15 units x 10 passes, run on Kaggle with commit `44ef812` and no uncommitted changes. Session context: torch 2.11.0+cu128, CUDA 12.8, driver 580.178.04, Tesla T4, power limit 70 W. Raw files: `data/raw/smoke/passes.csv`, `data/raw/smoke/idle.csv` (run id `20cd96fc`). These are real measurements, but from one configuration only. They are a protocol check, not a thesis result.
+
+**Pipeline.** All 150 passes have status `ok`. Windows lasted 2.11 to 2.72 s (target at least 2 s). R ranged from 4 (out_proj) to 2,810 (ln). Zeus read nonzero energy throughout. The single idle window measured 31.2 W at 585 MHz, 56 C. The run took 6 min 12 s.
+
+**Repeatability.** The interquartile range of energy per repetition, divided by its median, ranged from 0.001 (loss, sdpa_core) to 0.049 (attn_proj) across units.
+
+**Power cap.** Median average power was 64.6 to 68.9 W in every unit (cap 70 W). Temperature rose from 62 C to 80 C within 6 minutes. The first unit of the session (embed_lookup, on a cool GPU) ran at 1,500 to 1,560 MHz. After it, the SM clock depended on the unit:
+
+| SM clock (median over passes) | Units |
+|---|---|
+| 1,035 to 1,208 MHz | rope, rmsnorm, sdpa_core, loss |
+| 578 to 795 MHz | ln, attn_proj, attn_core, mlp, out_proj, linear_core, gqa_proj, factorized_embed_in, block |
+| 450 MHz | factorized_embed_out |
+
+With power pinned at the cap, the clock settles at whatever the unit's workload can sustain within 70 W, so matmul-heavy units get the lowest clocks. That makes clock rate an outcome of the power cap rather than an independent nuisance variable, which matters for interpreting C4 on this GPU. The cool start of the session and the inadequate throttle flag led to two protocol changes (Section 6, steps 0 and 7).
+
+**Measured time vs analytical t_hat** (t_hat divided by the measured time per repetition, i.e. the fraction of the analytical roofline achieved): embed_lookup 0.65, ln 0.49, attn_proj 0.38, rope 0.58, attn_core 0.46, mlp 0.38, out_proj 0.35, loss 0.61, block 0.32; substitutions sdpa_core 0.18, linear_core 0.62, gqa_proj 0.37, factorized_embed_in 0.29, factorized_embed_out 0.33, rmsnorm 0.74. The matmul units' 0.35 to 0.38 is consistent with SM clocks at about 40% of the 1,590 MHz boost clock that the 8.1 TFLOP/s peak assumes.
+
+**Energy closure.** E_total = 12 x E_block + E_embed + E_ln + E_out_proj + E_loss = 167.47 J per forward and backward over 8,192 tokens. The components sum to 164.58 J, so Unattributed is 1.7%.
+
+**Preview of shares (one configuration, medians over 10 passes, not a result):**
+
+| Component | C2 | C3 | C4 = C3 - C2 | Memory-bound |
+|---|---|---|---|---|
+| embed_lookup | 0.0000 | 0.0007 | +0.0007 | yes |
+| ln (2L + 1) | 0.0006 | 0.0080 | +0.0075 | yes |
+| attn_proj | 0.2123 | 0.1731 | -0.0392 | no |
+| rope | 0.0001 | 0.0177 | +0.0177 | yes |
+| attn_core | 0.0719 | 0.1369 | +0.0650 | yes |
+| mlp | 0.4251 | 0.3575 | -0.0676 | no |
+| out_proj | 0.2895 | 0.2657 | -0.0238 | no |
+| loss | 0.0006 | 0.0231 | +0.0225 | yes |
+| Unattributed | | 0.0172 | | |
+
+In this configuration every memory-bound component has C4 > 0 and every compute-bound component has C4 < 0. The decision rule needs the full grid and the per-pass IQR (DESIGN section 8), so this is not yet evidence for H1.

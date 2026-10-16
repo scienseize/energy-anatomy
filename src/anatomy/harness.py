@@ -5,6 +5,7 @@ import gc
 import math
 import os
 import subprocess
+import threading
 import time
 import uuid
 from datetime import datetime, timezone
@@ -20,15 +21,24 @@ from anatomy.units import UNITS, build, kind, make_inputs, step
 
 FIELDS = ["run_id", "ts", "model", "seq_len", "precision", "tokens", "unit", "unit_kind", "pass_idx",
           "reps", "energy_j", "time_s", "energy_per_rep_j", "avg_power_w", "sm_clock_mhz",
-          "mem_clock_mhz", "temp_c", "power_limit_w", "throttled", "status", "torch", "cuda",
-          "driver", "git_sha"]
+          "mem_clock_mhz", "temp_c", "power_limit_w", "throttled", "throttle_reasons", "status", "torch",
+          "cuda", "driver", "git_sha"]
 IDLE_FIELDS = ["run_id", "ts", "energy_j", "time_s", "avg_power_w", "sm_clock_mhz", "mem_clock_mhz",
-               "temp_c", "power_limit_w"]
+               "temp_c", "power_limit_w", "throttle_reasons"]
 PROBE_S = 0.2  # calibration probe length
+SAMPLE_S = 0.1  # NVML sampling period inside a window
+# NVML clocks-event (throttle) reason bits, stable across driver versions
+REASONS = {0x1: "gpu_idle", 0x2: "app_clocks", 0x4: "sw_power_cap", 0x8: "hw_slowdown", 0x10: "sync_boost",
+           0x20: "sw_thermal", 0x40: "hw_thermal", 0x80: "hw_power_brake", 0x100: "display_clock"}
+
+
+def _reasons(mask: int) -> str:
+    return "|".join(name for bit, name in REASONS.items() if mask & bit) or "none"
 
 
 class Gpu:
-    """Zeus energy windows + NVML context on CUDA device 0."""
+    """Zeus energy windows + NVML context on CUDA device 0. Clocks, temperature and throttle
+    reasons are sampled every SAMPLE_S during each window, not read once afterwards."""
 
     device = "cuda"
 
@@ -36,29 +46,71 @@ class Gpu:
         import pynvml
         from zeus.monitor import ZeusMonitor
 
-        self.nvml = pynvml
-        pynvml.nvmlInit()
-        self.h = pynvml.nvmlDeviceGetHandleByIndex(0)
+        self.nvml = n = pynvml
+        n.nvmlInit()
+        self.h = n.nvmlDeviceGetHandleByIndex(0)
         bus = getattr(torch.cuda.get_device_properties(0), "pci_bus_id", None)
-        assert bus is None or pynvml.nvmlDeviceGetPciInfo(self.h).bus == bus, "NVML device 0 is not CUDA device 0"
+        assert bus is None or n.nvmlDeviceGetPciInfo(self.h).bus == bus, "NVML device 0 is not CUDA device 0"
         self.monitor = ZeusMonitor(gpu_indices=[0])
-        self.driver = pynvml.nvmlSystemGetDriverVersion()
+        self.driver = n.nvmlSystemGetDriverVersion()
+        self.max_sm_mhz = n.nvmlDeviceGetMaxClockInfo(self.h, n.NVML_CLOCK_SM)
+        self._get_reasons = getattr(n, "nvmlDeviceGetCurrentClocksEventReasons", None) or \
+            n.nvmlDeviceGetCurrentClocksThrottleReasons
 
     def sync(self):
         torch.cuda.synchronize()
 
-    def window(self, fn) -> tuple[float, float]:
+    def _temp(self) -> int:
+        return self.nvml.nvmlDeviceGetTemperature(self.h, self.nvml.NVML_TEMPERATURE_GPU)
+
+    def _sample(self) -> tuple:
+        n, h = self.nvml, self.h
+        return (n.nvmlDeviceGetClockInfo(h, n.NVML_CLOCK_SM), n.nvmlDeviceGetClockInfo(h, n.NVML_CLOCK_MEM),
+                self._temp(), self._get_reasons(h))
+
+    def window(self, fn) -> tuple[float, float, dict]:
+        samples, stop = [], threading.Event()
+
+        def sampler():
+            while not stop.is_set():
+                samples.append(self._sample())
+                stop.wait(SAMPLE_S)
+
+        th = threading.Thread(target=sampler, daemon=True)
         self.monitor.begin_window("w")  # syncs CUDA before reading the counter
+        th.start()
         fn()
         m = self.monitor.end_window("w")
-        return sum(m.gpu_energy.values()), m.time
+        stop.set()
+        th.join()
+        sm, mem, temp, mask = zip(*samples)
+        mask_or = 0
+        for x in mask:
+            mask_or |= x
+        ctx = {"sm_clock_mhz": sum(sm) / len(sm), "mem_clock_mhz": sum(mem) / len(mem), "temp_c": max(temp),
+               "power_limit_w": self.nvml.nvmlDeviceGetEnforcedPowerLimit(self.h) / 1000,
+               "throttle_reasons": _reasons(mask_or)}
+        return sum(m.gpu_energy.values()), m.time, ctx
 
-    def context(self) -> dict:
-        n, h = self.nvml, self.h
-        return {"sm_clock_mhz": n.nvmlDeviceGetClockInfo(h, n.NVML_CLOCK_SM),
-                "mem_clock_mhz": n.nvmlDeviceGetClockInfo(h, n.NVML_CLOCK_MEM),
-                "temp_c": n.nvmlDeviceGetTemperature(h, n.NVML_TEMPERATURE_GPU),
-                "power_limit_w": n.nvmlDeviceGetEnforcedPowerLimit(h) / 1000}
+    def precondition(self, max_s: float, step_s: float, tol_c: float) -> tuple[int, float]:
+        """Run matmuls until the temperature changes by < tol_c over step_s (or max_s), so every
+        measured unit, including the first of a session, sees the hot steady state."""
+        x = torch.randn(4096, 4096, device="cuda")
+        t0, last = time.monotonic(), self._temp()
+        while time.monotonic() - t0 < max_s:
+            end = time.monotonic() + step_s
+            while time.monotonic() < end:
+                for _ in range(10):
+                    x = x @ x
+                    x = x / x.norm()
+                torch.cuda.synchronize()
+            now = self._temp()
+            if abs(now - last) < tol_c:
+                break
+            last = now
+        del x
+        torch.cuda.empty_cache()
+        return self._temp(), time.monotonic() - t0
 
 
 class FakeGpu:
@@ -67,6 +119,7 @@ class FakeGpu:
     device = "cpu"
     driver = "fake"
     POWER_W = 50.0
+    max_sm_mhz = 1590
 
     def sync(self):
         pass
@@ -75,10 +128,12 @@ class FakeGpu:
         t = time.perf_counter()
         fn()
         dt = time.perf_counter() - t
-        return dt * self.POWER_W, dt
+        ctx = {"sm_clock_mhz": 1590, "mem_clock_mhz": 5000, "temp_c": 40, "power_limit_w": 70.0,
+               "throttle_reasons": "none"}
+        return dt * self.POWER_W, dt, ctx
 
-    def context(self):
-        return {"sm_clock_mhz": 1590, "mem_clock_mhz": 5000, "temp_c": 40, "power_limit_w": 70.0}
+    def precondition(self, max_s, step_s, tol_c):
+        return 40, 0.0
 
 
 def _git_sha() -> str:
@@ -118,23 +173,24 @@ class Profiler:
         self.static = {"run_id": self.run_id, "torch": torch.__version__, "cuda": torch.version.cuda or "",
                        "driver": gpu.driver, "git_sha": _git_sha()}
         self.done: dict[tuple, set[int]] = {}  # (model, seq, prec, unit) -> pass indices recorded
-        self.ref_sm: dict[tuple, float] = {}  # pass-0 SM clock, the throttle reference
         if resume and self.passes_csv.exists():
             with open(self.passes_csv) as f:
                 for r in csv.DictReader(f):
                     k = _key(r["model"], r["seq_len"], r["precision"], r["unit"])
                     self.done.setdefault(k, set()).add(int(r["pass_idx"]))
-                    if r["pass_idx"] == "0" and r["sm_clock_mhz"]:
-                        self.ref_sm[k] = float(r["sm_clock_mhz"])
         self.last_idle = -math.inf
 
     def idle_if_due(self) -> None:
         if time.monotonic() - self.last_idle < self.p["idle_every_min"] * 60:
             return
+        if self.last_idle == -math.inf:  # session start: reach thermal steady state first
+            temp, secs = self.gpu.precondition(self.p["precondition_max_s"], self.p["precondition_step_s"],
+                                               self.p["precondition_tol_c"])
+            print(f"preconditioned: {temp} C after {secs:.0f} s", flush=True)
         self.gpu.sync()
-        e, t = self.gpu.window(lambda: time.sleep(self.p["idle_window_s"]))
+        e, t, ctx = self.gpu.window(lambda: time.sleep(self.p["idle_window_s"]))
         _append(self.idle_csv, IDLE_FIELDS, {"run_id": self.run_id, "ts": _now(), "energy_j": e,
-                                             "time_s": t, "avg_power_w": e / t, **self.gpu.context()})
+                                             "time_s": t, "avg_power_w": e / t, **ctx})
         self.last_idle = time.monotonic()
 
     def _buffers(self, unit: str, run: RunSpec):
@@ -179,10 +235,9 @@ class Profiler:
             reps = self._calibrate(mod, sets)
             for j in todo:
                 self.idle_if_due()
-                e, t = self.gpu.window(lambda: self._reps(mod, sets, reps))
-                ctx = self.gpu.context()
-                ref = self.ref_sm.setdefault(k, ctx["sm_clock_mhz"]) if j == 0 else self.ref_sm.get(k)
-                throttled = ref is not None and ctx["sm_clock_mhz"] < (1 - self.p["throttle_drop"]) * ref
+                e, t, ctx = self.gpu.window(lambda: self._reps(mod, sets, reps))
+                # Against the GPU's max SM clock: pass 0 is already power-capped on the T4 (smoke test).
+                throttled = ctx["sm_clock_mhz"] < (1 - self.p["throttle_drop"]) * self.gpu.max_sm_mhz
                 _append(self.passes_csv, FIELDS, {
                     **base, "ts": _now(), "pass_idx": j, "reps": reps, "energy_j": e, "time_s": t,
                     "energy_per_rep_j": e / reps, "avg_power_w": e / t, **ctx, "throttled": throttled,

@@ -142,7 +142,7 @@ Implemented in `src/anatomy/harness.py`; run with `anatomy profile [--resume]`. 
 7. **Context** (revised 2026-10-16, after the smoke test). A background thread samples NVML every 0.1 s during each window. The row stores the mean SM and memory clocks over the window, the maximum temperature, the enforced power limit, and `throttle_reasons`: the union (bitwise OR) of NVML's clocks-event reasons over all samples, written as names (`sw_power_cap`, `sw_thermal`, `hw_slowdown`, `hw_thermal`, `hw_power_brake`, `gpu_idle`, ...). Kaggle grants no root, so clocks cannot be locked. A pass is flagged `throttled` if its mean SM clock is below 90% of the GPU's maximum SM clock (NVML; 1,590 MHz on the T4). Throttled passes are flagged, never dropped. The original rule (compare with pass 0 of the same unit) was replaced because the smoke test showed pass 0 is already power-capped, so that rule flagged 5 of 150 passes while every unit after the first ran at 27 to 76% of the maximum SM clock.
 8. **Status.** `ok`; `short_window` if the measured window came in under 2 s despite calibration (kept, flagged for the analysis); `oom` if the unit ran out of GPU memory. An OOM writes one `oom` row per remaining pass, frees memory, and moves on. It is never silently dropped.
 9. **Idle baseline** (decided 2026-10-16). After pre-conditioning, a 10 s idle window (device synchronized, then sleep inside a Zeus window) at the start of each session and whenever 30 minutes have passed since the last one, checked before every pass. Idle windows go to `data/raw/idle.csv`. Shares use total energy. The idle power x window time correction (dynamic energy) is an appendix sensitivity check only.
-10. **Persistence and resume.** Every pass is appended to `passes.csv` and the file is closed immediately, so a killed session loses at most the pass in progress. With `--resume`, any (configuration, unit, pass index) already present, of any status, is skipped. A partially measured unit is rebuilt, warmed up and recalibrated, and only its missing passes are measured, so its R may differ between sessions (energy per repetition stays comparable). Without `--resume`, all passes are appended again under a new run id, for deliberate reruns. Before appending, the harness checks that an existing `passes.csv` or `idle.csv` has exactly the current column layout and stops with an error otherwise, so rows are never written under a stale header (for example, the earlier smoke-test schema).
+10. **Persistence and resume.** Every pass is appended to `passes.csv` and the file is closed immediately, so a killed session loses at most the pass in progress. With `--resume`, any (configuration, unit, pass index) already present, of any status, is skipped. A configuration is never split across sessions (decided 2026-10-16, after the second smoke test showed absolute energy shifting 16% between sessions; Section 12). If an earlier session left a configuration incomplete, the resumed session measures all of that configuration's units again from pass 0. The earlier partial rows stay in the append-only file but are not used: the analysis takes, per configuration, the one run id that covers every unit and pass. Without `--resume`, all passes are appended again under a new run id, for deliberate reruns. Before appending, the harness checks that an existing `passes.csv` or `idle.csv` has exactly the current column layout and stops with an error otherwise, so rows are never written under a stale header (for example, the earlier smoke-test schema).
 11. **Device identity.** Kaggle provides two T4s. The harness sets `CUDA_DEVICE_ORDER=PCI_BUS_ID` before CUDA initializes and asserts that NVML device 0 and CUDA device 0 have the same PCI bus id. That way the energy counter, the clock readings and the workload all refer to the same physical GPU.
 
 ### 6.1 Kaggle procedure
@@ -160,13 +160,13 @@ The first session runs a smoke test (`SMOKE = True`): one 160M configuration int
 ## 7. Data schemas
 
 `data/raw/passes.csv` (append-only, one row per pass):
-`run_id, ts, model, seq_len, precision, tokens, unit, unit_kind{component|substitution|block}, pass_idx, reps, energy_j, time_s, energy_per_rep_j, avg_power_w, sm_clock_mhz, mem_clock_mhz, temp_c, power_limit_w, throttled, throttle_reasons, status{ok|short_window|oom}, torch, cuda, driver, git_sha`
+`run_id, ts, model, seq_len, precision, tokens, unit, unit_kind{component|substitution|block}, pass_idx, reps, energy_j, time_s, energy_per_rep_j, avg_power_w, sm_clock_mhz, mem_clock_mhz, temp_c, power_limit_w, throttled, throttle_reasons, status{ok|short_window|oom}, torch, cuda, driver, gpu_uuid, git_sha`
 
-`sm_clock_mhz` and `mem_clock_mhz` are window means, and `temp_c` is the window maximum (Section 6, step 7). `throttle_reasons` was added on 2026-10-16 after the smoke test. `power_limit_w` was added to the DESIGN section 9 schema on 2026-10-16, because DESIGN section 6 requires recording the power limit. Substitution unit names in this file are `sdpa_core, linear_core, gqa_proj, factorized_embed_in, factorized_embed_out, rmsnorm`.
+`sm_clock_mhz` and `mem_clock_mhz` are window means, and `temp_c` is the window maximum (Section 6, step 7). `throttle_reasons` was added on 2026-10-16 after the first smoke test. `gpu_uuid` (NVML's identifier of the physical GPU) was added on 2026-10-16 after the second smoke test, so rows can be grouped by device. `power_limit_w` was added to the DESIGN section 9 schema on 2026-10-16, because DESIGN section 6 requires recording the power limit. Substitution unit names in this file are `sdpa_core, linear_core, gqa_proj, factorized_embed_in, factorized_embed_out, rmsnorm`.
 
-`data/raw/idle.csv`: `run_id, ts, energy_j, time_s, avg_power_w, sm_clock_mhz, mem_clock_mhz, temp_c, power_limit_w, throttle_reasons`
+`data/raw/idle.csv`: `run_id, ts, energy_j, time_s, avg_power_w, sm_clock_mhz, mem_clock_mhz, temp_c, power_limit_w, throttle_reasons, gpu_uuid`
 
-`data/raw/smoke/` holds the smoke-test files (Section 12) in the earlier schema: no `throttle_reasons` column, clocks and temperature read once right after each window, and `throttled` computed against pass 0.
+`data/raw/smoke/` holds the first smoke test (Section 12) in the earliest schema: no `throttle_reasons` or `gpu_uuid` column, clocks and temperature read once right after each window, and `throttled` computed against pass 0. `data/raw/smoke-2/` holds the second smoke test: current schema except `gpu_uuid`.
 
 `data/derived/analytical.csv`: `model, seq_len, precision, component, count_per_model, flops, bytes, c1, ridge, memory_bound, c2, t_hat`. Here `flops`, `bytes` and `t_hat` are per unit instance, forward + backward. `component` holds the unit name, including substitutions and `block`.
 
@@ -188,7 +188,7 @@ The first session runs a smoke test (`SMOKE = True`): one 160M configuration int
 | test_sdpa_core_matches_attn_core | The fused path equals eager attention within tolerance (CPU math backend; the GPU uses the memory-efficient kernel). |
 | test_linear_core_matches_quadratic_reference | The chunked linear attention equals the direct quadratic causal formulation (float64). |
 | test_substitution_shapes_and_gqa_heads | Each substitution produces outputs of the same total size as the unit it replaces; kv heads are 3, 4 and 8. |
-| test_dry_run_full_grid_and_resume | The harness runs the full unit set on a tiny grid end to end with a fake monitor; resume adds nothing; a dropped last pass is redone exactly. |
+| test_dry_run_full_grid_and_resume | The harness runs the full unit set on a tiny grid end to end with a fake monitor; resume adds nothing; a configuration left incomplete is measured again in full in one new session, and the other configurations are untouched. |
 | test_oom_is_logged_and_run_continues | A unit that runs out of memory is logged as `oom` for each pass, and later units still run. |
 | test_gpu_window_samples_clocks_and_reasons | With stub NVML and Zeus objects, the GPU window averages the sampled clocks, takes the maximum temperature, and ORs the throttle-reason bits. |
 | test_refuses_to_append_under_a_different_header | An output file with a different column layout stops the run and is left untouched. |
@@ -234,7 +234,8 @@ Observations for the Results and Discussion chapter:
 6. **Isolation.** Units measured in isolation see cold inputs from rotating buffers. In a real training step some inputs are warm in L2. Unattributed energy (E_total minus the sum of components) bounds the combined effect of isolation and of the work outside every component.
 7. **Measurement windows span R repetitions** (at least 2 s), because the NVML energy counter updates far more slowly than a single small kernel runs. Energy per repetition is an average over the window, not a per-kernel reading.
 8. **Expected OOM at the largest configurations.** The 6.9B block in FP32 at seq 2048 holds several float32 attention-score tensors of about 2 GB each and is expected to exceed 16 GB. If it does, that configuration has no block measurement. It is logged as `oom` and must be reported as a gap, not interpolated.
-9. **No measured numbers exist yet.** Every quantitative statement above is analytical.
+9. **Absolute energy is not reproducible across sessions to better than about 16%.** Two smoke runs of the same configuration, with identical software, differed by 16% in total energy, with higher clocks in every unit of the second run (Section 12). The likely cause is a different physical T4 or different cooling; the first two runs did not record the device. Shares (C3, C4) were stable to within 0.011, so the thesis conclusions rest on shares, and each configuration is measured within one session (Section 6, step 10). Absolute joules are reported as session-specific.
+10. **Only two smoke configurations have been measured.** All other quantitative statements above are analytical.
 
 ## 11. Reproducing
 
@@ -247,7 +248,9 @@ uv run anatomy profile --dry-run   # harness end to end on CPU, fake energy, tem
 ```
 On Kaggle: run `notebooks/kaggle_profile.ipynb` (Section 6.1). Results land in `/kaggle/working/raw/` and are copied into `data/raw/` in the repository.
 
-## 12. Smoke test on the Kaggle T4 (2026-10-16)
+## 12. Smoke tests on the Kaggle T4 (2026-10-16)
+
+### 12.1 First smoke test
 
 One configuration (Pythia 160M, seq 512, FP32), all 15 units x 10 passes, run on Kaggle with commit `44ef812` and no uncommitted changes. Session context: torch 2.11.0+cu128, CUDA 12.8, driver 580.178.04, Tesla T4, power limit 70 W. Raw files: `data/raw/smoke/passes.csv`, `data/raw/smoke/idle.csv` (run id `20cd96fc`). These are real measurements, but from one configuration only. They are a protocol check, not a thesis result.
 
@@ -284,3 +287,28 @@ With power pinned at the cap, the clock settles at whatever the unit's workload 
 | Unattributed | | 0.0172 | | |
 
 In this configuration every memory-bound component has C4 > 0 and every compute-bound component has C4 < 0. The decision rule needs the full grid and the per-pass IQR (DESIGN section 8), so this is not yet evidence for H1.
+
+### 12.2 Second smoke test (after the protocol changes)
+
+The same configuration (Pythia 160M, seq 512, FP32), run on Kaggle with commit `6a80ad8` (no uncommitted changes), with thermal pre-conditioning and in-window NVML sampling. Same software as the first run: torch 2.11.0+cu128, CUDA 12.8, driver 580.178.04. Raw files: `data/raw/smoke-2/` (run id `a59dc0ff`). The run took 6 min 5 s after pre-conditioning.
+
+**Protocol changes behave as intended.** The idle window after pre-conditioning ran at 78 C (31.1 W), and every pass ran at 73 to 80 C, so the first unit no longer runs on a cool GPU. All 150 passes are `ok`, with windows of 2.16 to 2.64 s. NVML reported `sw_power_cap` as the throttle reason in all 150 passes, which confirms the power cap directly. Against the 90%-of-maximum rule, 141 of 150 passes are `throttled`. On the T4 this flag marks the normal operating state, and `throttle_reasons` together with the mean clock carry the information. The spread of energy per repetition across passes (IQR divided by median) was 0.001 to 0.047 per unit.
+
+**Clocks averaged over each window are higher than the single post-window reading of the first run.** Per-unit median SM clocks were 715 to 1,494 MHz, against 450 to 1,522 MHz in the first run. Part of the difference is the measurement change: reading once after the window ends catches the GPU as it leaves the load.
+
+**Cross-session shift in absolute energy.** E_total was 140.75 J against 167.47 J in the first run (-16%). Energy per repetition fell by about 15 to 21% for matmul-heavy units (attn_proj 0.853, mlp 0.845, out_proj 0.808, block 0.846, factorized_embed_out 0.793, as ratios of run 2 to run 1) and changed by -3% to +5% for embed_lookup, ln, rope, loss, sdpa_core and rmsnorm. Software was identical, so the shift is in the hardware or its cooling. The first two runs did not record which physical GPU they used, which led to the `gpu_uuid` column and to measuring each configuration within one session (Section 6, step 10).
+
+**Shares were stable.** Unattributed was 0.7% (first run 1.7%). C4 per component, run 1 then run 2:
+
+| Component | C2 | C4 run 1 | C4 run 2 |
+|---|---|---|---|
+| embed_lookup | 0.0000 | +0.0007 | +0.0008 |
+| ln (2L + 1) | 0.0006 | +0.0075 | +0.0087 |
+| attn_proj | 0.2123 | -0.0392 | -0.0365 |
+| rope | 0.0001 | +0.0177 | +0.0220 |
+| attn_core | 0.0719 | +0.0650 | +0.0696 |
+| mlp | 0.4251 | -0.0676 | -0.0659 |
+| out_proj | 0.2895 | -0.0238 | -0.0339 |
+| loss | 0.0006 | +0.0225 | +0.0279 |
+
+Every sign was preserved, and the largest change was 0.0101 (out_proj). This is the basis for treating shares, not absolute joules, as the reportable quantity (Section 10, limitation 9).

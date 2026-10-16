@@ -22,9 +22,9 @@ from anatomy.units import UNITS, build, kind, make_inputs, step
 FIELDS = ["run_id", "ts", "model", "seq_len", "precision", "tokens", "unit", "unit_kind", "pass_idx",
           "reps", "energy_j", "time_s", "energy_per_rep_j", "avg_power_w", "sm_clock_mhz",
           "mem_clock_mhz", "temp_c", "power_limit_w", "throttled", "throttle_reasons", "status", "torch",
-          "cuda", "driver", "git_sha"]
+          "cuda", "driver", "gpu_uuid", "git_sha"]
 IDLE_FIELDS = ["run_id", "ts", "energy_j", "time_s", "avg_power_w", "sm_clock_mhz", "mem_clock_mhz",
-               "temp_c", "power_limit_w", "throttle_reasons"]
+               "temp_c", "power_limit_w", "throttle_reasons", "gpu_uuid"]
 PROBE_S = 0.2  # calibration probe length
 SAMPLE_S = 0.1  # NVML sampling period inside a window
 # NVML clocks-event (throttle) reason bits, stable across driver versions
@@ -53,6 +53,8 @@ class Gpu:
         assert bus is None or n.nvmlDeviceGetPciInfo(self.h).bus == bus, "NVML device 0 is not CUDA device 0"
         self.monitor = ZeusMonitor(gpu_indices=[0])
         self.driver = n.nvmlSystemGetDriverVersion()
+        uuid_ = n.nvmlDeviceGetUUID(self.h)
+        self.uuid = uuid_.decode() if isinstance(uuid_, bytes) else uuid_
         self.max_sm_mhz = n.nvmlDeviceGetMaxClockInfo(self.h, n.NVML_CLOCK_SM)
         self._get_reasons = getattr(n, "nvmlDeviceGetCurrentClocksEventReasons", None) or \
             n.nvmlDeviceGetCurrentClocksThrottleReasons
@@ -118,6 +120,7 @@ class FakeGpu:
 
     device = "cpu"
     driver = "fake"
+    uuid = "fake"
     POWER_W = 50.0
     max_sm_mhz = 1590
 
@@ -178,7 +181,7 @@ class Profiler:
         out_dir.mkdir(parents=True, exist_ok=True)
         self.run_id = uuid.uuid4().hex[:8]
         self.static = {"run_id": self.run_id, "torch": torch.__version__, "cuda": torch.version.cuda or "",
-                       "driver": gpu.driver, "git_sha": _git_sha()}
+                       "driver": gpu.driver, "gpu_uuid": gpu.uuid, "git_sha": _git_sha()}
         self.done: dict[tuple, set[int]] = {}  # (model, seq, prec, unit) -> pass indices recorded
         if resume and self.passes_csv.exists():
             with open(self.passes_csv) as f:
@@ -197,7 +200,8 @@ class Profiler:
         self.gpu.sync()
         e, t, ctx = self.gpu.window(lambda: time.sleep(self.p["idle_window_s"]))
         _append(self.idle_csv, IDLE_FIELDS, {"run_id": self.run_id, "ts": _now(), "energy_j": e,
-                                             "time_s": t, "avg_power_w": e / t, **ctx})
+                                             "time_s": t, "avg_power_w": e / t, **ctx,
+                                             "gpu_uuid": self.gpu.uuid})
         self.last_idle = time.monotonic()
 
     def _buffers(self, unit: str, run: RunSpec):
@@ -265,6 +269,14 @@ class Profiler:
     def run(self, runs: list[RunSpec], units=UNITS) -> None:
         # Config-major in grid order (160M first): each finished config is analyzable on its own.
         for run in runs:
+            keys = [_key(run.model.name, run.seq_len, run.precision, u) for u in units]
+            recorded = sum(len(self.done.get(k, ())) for k in keys)
+            if 0 < recorded < len(units) * self.p["passes"]:
+                # Absolute energy shifts between sessions (smoke tests: -16%), so a config is never
+                # split across sessions: a partial one from an earlier session is measured again in full.
+                print(f"redoing partial config {keys[0][:3]} ({recorded} earlier rows kept, not used)", flush=True)
+                for k in keys:
+                    self.done.pop(k, None)
             for u in units:
                 self.unit(run, u)
 

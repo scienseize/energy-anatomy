@@ -23,15 +23,21 @@ def test_dry_run_full_grid_and_resume(tmp_path, monkeypatch):
     harness.profile(resume=True, dry_run=True, out_dir=tmp_path)
     assert len(rows(tmp_path)) == expected  # nothing redone
 
-    # Simulate a session killed mid-unit: drop the last pass, resume redoes exactly that one.
+    # Simulate a session killed mid-config: drop the last pass. Resume measures that whole config
+    # again in the new session (never split a config across sessions) and leaves the rest alone.
     with open(tmp_path / "passes.csv", "w", newline="") as f:
         w = csv.DictWriter(f, harness.FIELDS)
         w.writeheader()
         w.writerows(first[:-1])
     harness.profile(resume=True, dry_run=True, out_dir=tmp_path)
     after = rows(tmp_path)
-    assert len(after) == expected
-    assert {k: after[-1][k] for k in ("unit", "pass_idx")} == {k: first[-1][k] for k in ("unit", "pass_idx")}
+    per_config = len(UNITS) * harness.DRY_PROTOCOL["passes"]
+    assert len(after) == expected - 1 + per_config
+    redo = after[expected - 1:]
+    last = harness.tiny_runs()[-1]
+    assert {(r["model"], int(r["seq_len"]), r["precision"]) for r in redo} == {(last.model.name, last.seq_len, last.precision)}
+    assert len({r["run_id"] for r in redo}) == 1 and redo[0]["run_id"] != first[0]["run_id"]
+    assert all(r["gpu_uuid"] == "fake" for r in after)
 
 
 def test_oom_is_logged_and_run_continues(tmp_path, monkeypatch):

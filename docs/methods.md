@@ -2,7 +2,7 @@
 
 This file records how the code in this repository produces every number used in the thesis, at the level of detail needed to write the Methodology chapter and to defend the Results and Discussion chapter. DESIGN.md is the specification; this file records what was implemented, the conventions it fixes, where it departs from the specification, and its known limitations. Section and file references point at the code that implements each statement.
 
-Status (2026-10-17): the full grid has been measured on the Kaggle T4 (Section 13). Raw data are in `data/raw/`. The analysis (shares, C4, decision rule) is not implemented yet. Every number in Section 9 is analytical (computed, not measured).
+Status (2026-10-17): the full grid has been measured on the Kaggle T4 (Section 13), and the baseline analysis (shares, C4, decision rule, validation; tables T4 to T7, figures F5 and F7) is implemented and tested (Sections 14 and 15). Substitution analysis (T9, T10), capability (T8) and rank shifts are not done yet. Every number in Section 9 is analytical (computed, not measured).
 
 ## 1. Scope and provenance
 
@@ -172,7 +172,7 @@ The first session runs a smoke test (`SMOKE = True`): one 160M configuration int
 
 ## 8. Verification
 
-`uv run pytest` (32 tests):
+`uv run pytest` (43 tests):
 
 | Test | What it establishes |
 |---|---|
@@ -191,6 +191,12 @@ The first session runs a smoke test (`SMOKE = True`): one 160M configuration int
 | test_dry_run_full_grid_and_resume | The harness runs the full unit set on a tiny grid end to end with a fake monitor; resume adds nothing; a configuration left incomplete is measured again in full in one new session, and the other configurations are untouched. |
 | test_oom_is_logged_and_run_continues | A unit that runs out of memory is logged as `oom` for each pass, and later units still run. |
 | test_gpu_window_samples_clocks_and_reasons | With stub NVML and Zeus objects, the GPU window averages the sampled clocks, takes the maximum temperature, and ORs the throttle-reason bits. |
+| test_decision_rule (x6) | The decision rule at its boundaries: 10/18 is a majority and 9/18 is not; median C4 equal to the IQR fails (strict); positive C4 inside the spread fails; a component never memory-bound is "not tested"; only memory-bound configurations are counted. |
+| test_iqr_is_linear_type7 | The IQR uses linear (type 7) quantiles: IQR(1..10) = 4.5. |
+| test_spearman | Spearman rho is +1 and -1 for monotone data and handles ties with average ranks. |
+| test_select_session_takes_the_complete_run | Per configuration, the analysis keeps the session that covers every unit and pass, and fails if none does. |
+| test_share_identities | On the measured data, per configuration and pass: sum C3 + Unattributed = 1, sum C4 = -Unattributed, and the component-normalized C3 sums to 1, for total and dynamic energy. |
+| test_summary_invariant_to_row_order | Shuffling the raw rows changes no median and no rank. |
 | test_refuses_to_append_under_a_different_header | An output file with a different column layout stops the run and is left untouched. |
 
 Verified on the T4 by the smoke test (Section 12): the Zeus energy counter, the NVML/CUDA device pinning, the memory-efficient attention kernel, and the full harness on one configuration. Not yet verified on the T4: the in-window NVML sampling and the pre-conditioning added after the smoke test (next Kaggle session), and the GPU-specific operator decomposition.
@@ -235,13 +241,14 @@ Observations for the Results and Discussion chapter:
 7. **Measurement windows span R repetitions** (at least 2 s), because the NVML energy counter updates far more slowly than a single small kernel runs. Energy per repetition is an average over the window, not a per-kernel reading.
 8. **(Did not occur; see Section 13.) Expected OOM at the largest configurations.** The 6.9B block in FP32 at seq 2048 holds several float32 attention-score tensors of about 2 GB each and is expected to exceed 16 GB. If it does, that configuration has no block measurement. It is logged as `oom` and must be reported as a gap, not interpolated.
 9. **Absolute energy is not reproducible across sessions to better than about 16%.** Two smoke runs of the same configuration, with identical software, differed by 16% in total energy, with higher clocks in every unit of the second run (Section 12). The likely cause is a different physical T4 or different cooling; the first two runs did not record the device. Shares (C3, C4) were stable to within 0.011, so the thesis conclusions rest on shares, and each configuration is measured within one session (Section 6, step 10). Absolute joules are reported as session-specific.
-10. **Shares and decision-rule outcomes are not computed by tested code yet.** Section 13 reports only data-quality facts about the full run. Section 9 is analytical.
+10. **Unattributed energy is negative in 8 of 18 configurations** (down to -6.7%; Section 15). The isolated components then sum to more than the model total. The most plausible causes are that isolated units read cold inputs from rotating buffers, while inside the block some inputs are still in L2, and that isolated units launch separate kernels for work the block fuses or overlaps. Since the C4 values sum to -Unattributed, a negative Unattributed raises the C4 values by |Unattributed| in total, but how that overcount splits across components is not observable. If it were split equally (|Unattributed| / 8 each, at most 0.0084), it would exceed embed_lookup's margin over the decision threshold in all 8 negative-Unattributed configurations (margins 5e-5 to 2.5e-4), while ln, rope and attn_core keep their margins. If it is split in proportion to each component's energy, which is the same as renormalizing C3 over the 8 components, all four tested components remain supported in 18 of 18 configurations (TA3; smallest margins: embed_lookup 5.2e-5, ln 2.2e-3, rope 3.8e-3, attn_core 6.2e-3). The embed_lookup verdict is therefore the least robust of the four and should be reported with this caveat.
 
 ## 11. Reproducing
 
 ```
 uv sync                        # Python 3.11 env from uv.lock
-uv run pytest                  # 32 tests
+uv run pytest                  # 43 tests
+uv run anatomy analyze         # shares, C4, decision rule: T4-T7, TA1-TA2, F5, F7
 uv run anatomy analytical      # data/derived/analytical.csv
 uv run anatomy report          # data/tables/T2.*, data/figures/F6.*
 uv run anatomy profile --dry-run   # harness end to end on CPU, fake energy, temp dir
@@ -324,3 +331,45 @@ The whole grid ran in one Kaggle session: run id `0cd31197`, one physical GPU (`
 **GPU state.** `throttle_reasons` was `sw_power_cap` in all 2,700 passes, and temperature stayed at 74 to 82 C. Windows lasted 2.00 to 4.91 s. The five idle windows (every 30 min) measured 34.2 to 36.3 W at 75 to 77 C.
 
 **Repeatability.** Across the 270 (configuration, unit) groups, IQR / median of energy per repetition has a median of 0.014. The largest values are 0.108 (mlp, 6.9B, 512, FP16), 0.104 (ln, 1.4B, 1024, FP16), 0.083 (ln, 6.9B, 1024, FP16) and 0.078 (block, 160M, 2048, FP32).
+
+## 14. Analysis method as implemented
+
+Implemented in `src/anatomy/analysis.py`; run with `anatomy analyze`. Inputs: `data/raw/passes.csv`, `data/raw/idle.csv`, `data/derived/analytical.csv`. Outputs: `data/derived/shares.csv` (per pass, total energy), `shares_dynamic.csv` (per pass, dynamic energy), `shares_summary.csv` (per configuration and component), tables T4 to T7 and the appendix tables TA1 to TA3, and figures F5 and F7.
+
+1. **Session selection.** Per configuration, the analysis uses the one run id whose rows cover every baseline component and the block for all 10 passes (the latest such run id if a configuration was deliberately rerun). It fails if no session covers a configuration. In the full run, every configuration came from run `0cd31197`.
+2. **Usable passes.** Status `ok` and `short_window` (flagged, kept). `oom` rows carry no energy. If any unit lacks pass j, the whole matched set j of that configuration is dropped. No set was dropped in the full run.
+3. **Per-pass shares** (DESIGN section 8). For pass j of configuration k, E_c,j = (energy per repetition of c in pass j) x count per model, and E_total,j = L x E_block,j + E_embed,j + E_ln,j + E_out_proj,j + E_loss,j, where the single E_ln instance is the final norm. Then C3 = E_c,j / E_total,j, Unattributed_j = 1 - sum of C3, and C4 = C3 - C2. This gives 10 values of C3 and C4 per component and configuration.
+4. **Summary.** Median and IQR over the 10 passes. The IQR is Q3 - Q1 with linear (Hyndman-Fan type 7) quantiles, numpy's default (decided 2026-10-17). `shares_summary.csv` also holds C1, C2, the memory-bound flag, energy per FLOP (median energy per repetition / analytical FLOPs), the median measured power, and the rank of the component by median C4 within its configuration (1 = largest C4).
+5. **Decision rule (T6).** For each tested component (embed_lookup; ln pooled with the final norm; rope; attn_core): among configurations where it is memory-bound, count those with median C4 > 0 and median C4 > IQR(C4), both strict. The component is *supported* if that count is a strict majority of its memory-bound configurations, *not supported* otherwise, and *not tested* if it is never memory-bound.
+6. **Validation (T4).** The analytical estimate is t_hat x count x P_class, where P_class is the mean of the measured median powers of the configuration's components in the same roofline class (memory-bound or not). It is normalized over the 8 components and compared with the measured C3 renormalized over the 8 components, so both sides sum to 1 (decided 2026-10-17: the analytical model has no Unattributed term). T4 reports the absolute difference per component and Spearman rho across the 8 components per configuration (descriptive).
+7. **Dynamic energy (appendix TA1, TA2).** Per pass, dynamic energy = energy_j - P_idle x time_s, where P_idle is the power of the nearest idle window at or before the pass in the same session (decided 2026-10-17). C3, C4 and the decision rule are recomputed on dynamic energy.
+8. **Normalized sensitivity (appendix TA3).** The decision rule recomputed with C4 = (C3 renormalized over the 8 components) - C2. This spreads any Unattributed energy over the components in proportion to their energy (limitation 10).
+
+## 15. Baseline results (full run)
+
+All values come from `data/derived/shares_summary.csv` and tables T4 to T7. They are measurements from one Kaggle T4 session (Section 13).
+
+**Decision rule (T6).** All four tested components are memory-bound in all 18 configurations, and each has median C4 > 0 and median C4 > IQR(C4) in all 18. Verdict: supported for embed_lookup, layer normalization (pooled), rope and attn_core. On dynamic energy (TA2) the result is identical: 18 of 18 for each. With C3 renormalized over the 8 components (TA3, the proportional treatment of Unattributed), it is also 18 of 18 for each, but embed_lookup's margin is thin there (limitation 10). Switching to dynamic energy moved the tested components' median C4 by -0.0040 to +0.0081.
+
+**Waste score C4 by component (median over passes; range over the 18 configurations):**
+
+| Component | Memory-bound | C4 range | Configs with C4 > 0 | Rank by C4 within config | Energy per FLOP (J) |
+|---|---|---|---|---|---|
+| attn_core | 18/18 | +0.0072 (6.9B/512/FP32) to +0.2949 (160M/2048/FP16) | 18 | 1 to 2 | 1.2e-11 to 5.1e-11 |
+| rope | 18/18 | +0.0040 to +0.0417 | 18 | 2 to 3 | 3.7e-09 to 6.6e-09 |
+| ln (pooled) | 18/18 | +0.0023 to +0.0234 | 18 | 3 to 4 | 2.7e-10 to 4.7e-10 |
+| loss | 18/18 | +0.0004 to +0.0421 | 18 | 2 to 6 | 5.1e-10 to 1.0e-09 |
+| embed_lookup | 18/18 | +0.0001 to +0.0020 | 18 | 5 to 7 | 1.1e-08 to 1.9e-08 |
+| out_proj | 0/18 | -0.1253 to +0.0078 | 7 | 4 to 7 | 4.4e-12 to 2.4e-11 |
+| mlp | 0/18 | -0.1771 to +0.0519 | 4 | 1 to 8 | 3.8e-12 to 3.0e-11 |
+| attn_proj | 0/18 | -0.0969 to -0.0131 | 0 | 6 to 8 | 3.7e-12 to 2.4e-11 |
+
+The smallest C4 values in each tested component's range all occur at Pythia 6.9B: at 2048 FP32 for embed_lookup, ln, rope and loss, and at 512 FP32 for attn_core. The largest occur at 160M in FP16.
+
+Observations for the Results and Discussion chapter:
+- **attn_core carries the largest waste.** It ranks first by C4 in 15 of 18 configurations and second in the other 3. Its C4 grows with sequence length and is largest in FP16, reaching +0.295 at 160M/2048/FP16, where it takes 53% of measured energy against a 24% compute share (F5).
+- **Positive C4 is not exclusive to memory-bound components.** In the three 6.9B FP32 configurations, mlp, which is compute-bound, has the largest C4 (up to +0.052). out_proj is slightly positive in 7 configurations, at most +0.008. The decision rule tests only memory-bound components, so this does not affect the verdicts, but it means C4 > 0 also arises where a compute-bound unit runs below its ridge-implied efficiency at the power-capped clock.
+- **The C2 near 0 situation.** embed_lookup, rope, ln and loss have C2 between 1e-7 and 6e-4, so their C4 is almost entirely their C3. Energy per FLOP separates them from the matmul units by one to four orders of magnitude (for example ln 2.7e-10 to 4.7e-10 J/FLOP against mlp 3.8e-12 to 3.0e-11), which confirms that their positive C4 reflects energy spent per unit of work, not a division artifact.
+- **Unattributed** ranges from -6.7% (6.9B/512/FP16) to +4.3% (160M/1024/FP16), with a median of +0.2%. It is negative in 8 configurations: all six 6.9B configurations and 1.4B FP32 at 512 and 1024. It is positive in every FP16 configuration of 160M and 1.4B (+1.7% to +4.3%). See limitation 10.
+
+**Validation (T4).** The analytical model ranks the 8 components almost exactly as measured. Spearman rho is 1.0 in 12 configurations, 0.976 in 5 (all FP16) and 0.952 at 6.9B/2048/FP16. The median absolute difference between analytical and measured component-normalized C3 is 0.008. The largest differences are for attn_core (median 0.042, at most 0.151 at 160M/1024/FP16) and mlp (median 0.055, at most 0.099). The analytical model gets the ordering right but not the size of attn_core's share, which is the quantity the measurement exists to provide.

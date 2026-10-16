@@ -206,6 +206,9 @@ Sanity outputs written alongside: Σ C2 = 1, Σ C3 + Unattributed = 1, Σ C4 ove
 20. ~~Configs split across sessions~~ **Decided (2026-10-16, after the second smoke test showed -16% absolute energy between sessions with stable shares): never split a config.** On `--resume`, a config left incomplete by an earlier session is remeasured in full; analysis uses, per config, the one run id covering every unit and pass.
 21. ~~GPU identity~~ **Decided (2026-10-16): add `gpu_uuid` (NVML UUID) to passes.csv and idle.csv.**
 22. ~~Second smoke run~~ **Decided (2026-10-16): kept in `data/raw/smoke-2/`** (current schema except `gpu_uuid`).
+23. ~~IQR method~~ **Decided (2026-10-17): linear (Hyndman-Fan type 7) quantiles**, numpy's default.
+24. ~~T4 measured C3~~ **Decided (2026-10-17): renormalized over the 8 components** (the analytical model has no Unattributed term).
+25. ~~Idle power for dynamic energy~~ **Decided (2026-10-17): the nearest preceding idle window** in the same session.
 
 Implementation notes (how the code realizes the above; full detail in `docs/methods.md`): FLOPs and bytes are traced per ATen op on the meta device rather than hand-enumerated; the Section 3 layout is collapsed to one file each for components, substitutions, analytical, harness and report, plus `units.py` as the shared unit registry.
 

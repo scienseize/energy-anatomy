@@ -16,6 +16,7 @@ src/anatomy/
   units.py               unit registry: build, inputs, one fwd+bwd step, counts per model
   analytical.py          FLOPs/bytes by tracing on the meta device; C1, ridge, C2, t_hat
   harness.py             Zeus energy windows, rotating buffers, calibration, resume
+  analysis.py            shares C3, waste C4, decision rule, validation
   report.py              tables (CSV + Markdown) and figures
   cli.py                 the `anatomy` command
 notebooks/kaggle_profile.ipynb   thin Kaggle runner
@@ -32,6 +33,7 @@ uv sync
 uv run pytest
 uv run anatomy analytical          # data/derived/analytical.csv
 uv run anatomy report              # T2, F6
+uv run anatomy analyze             # shares, C4, decision rule: T4-T7, F5, F7 (needs data/raw/passes.csv)
 uv run anatomy profile --dry-run   # harness end to end on CPU with fake energy (no real numbers)
 ```
 

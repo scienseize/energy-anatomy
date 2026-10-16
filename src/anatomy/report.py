@@ -85,3 +85,77 @@ def f6(analytical: Path = DATA / "derived" / "analytical.csv") -> None:
     for ext in ("png", "svg"):
         fig.savefig(FIGURES / f"F6.{ext}", dpi=200)
     plt.close(fig)
+
+
+def _grid_panels(summary_csv: Path):
+    """Rows of shares_summary.csv grouped into a 3 (model) x 6 (seq x precision) panel grid."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    with open(summary_csv) as f:
+        rows = [r for r in csv.DictReader(f) if r["component"] in COMPONENTS]
+    models = list(dict.fromkeys(r["model"] for r in rows))
+    cols = list(dict.fromkeys((r["seq_len"], r["precision"]) for r in rows))
+    fig, axes = plt.subplots(len(models), len(cols), figsize=(17, 8.5), sharex=True, sharey=True)
+    panels = []
+    for i, m in enumerate(models):
+        for j, (s, p) in enumerate(cols):
+            sel = {r["component"]: r for r in rows if (r["model"], r["seq_len"], r["precision"]) == (m, s, p)}
+            ax = axes[i, j]
+            ax.set_title(f"{m.removeprefix('pythia-')} · {s} · {p.upper()}", fontsize=8.5)
+            ax.spines[["top", "right"]].set_visible(False)
+            ax.grid(True, axis="x", color="#e5e4de", lw=0.6)
+            ax.set_axisbelow(True)
+            ax.tick_params(labelsize=8)
+            panels.append((ax, sel))
+    return fig, axes, panels, plt
+
+
+def f5(summary_csv: Path = DATA / "derived" / "shares_summary.csv") -> None:
+    """F5: analytical compute share C2 vs measured energy share C3 (median, IQR whisker) per component."""
+    import numpy as np
+
+    fig, axes, panels, plt = _grid_panels(summary_csv)
+    y = np.arange(len(COMPONENTS))[::-1]
+    for ax, sel in panels:
+        c2 = [float(sel[c]["c2"]) for c in COMPONENTS]
+        c3 = [float(sel[c]["c3_med"]) for c in COMPONENTS]
+        err = [float(sel[c]["c3_iqr"]) / 2 for c in COMPONENTS]
+        ax.barh(y + 0.2, c2, height=0.38, color="#b4b2a9", label="C2 compute share (analytical)")
+        ax.barh(y - 0.2, c3, height=0.38, color="#2a78d6", xerr=err, error_kw={"lw": 0.8, "ecolor": "#0d366b"},
+                label="C3 energy share (measured median, IQR)")
+    axes[0, 0].set_yticks(y, COMPONENTS)
+    for ax in axes[-1]:
+        ax.set_xlabel("share of model total", fontsize=8)
+    fig.legend(*axes[0, 0].get_legend_handles_labels(), loc="upper center", ncol=2, fontsize=8.5,
+               frameon=False, bbox_to_anchor=(0.5, 0.965))
+    fig.suptitle("F5. Compute share vs energy share per component, Pythia on T4 (rows: model; columns: sequence length, precision)", fontsize=10, y=0.995)
+    fig.tight_layout(rect=(0, 0, 1, 0.94))
+    for ext in ("png", "svg"):
+        fig.savefig(FIGURES / f"F5.{ext}", dpi=200)
+    plt.close(fig)
+
+
+def f7(summary_csv: Path = DATA / "derived" / "shares_summary.csv") -> None:
+    """F7: diverging waste score C4 = C3 - C2 (median, IQR whisker); * marks memory-bound components."""
+    import numpy as np
+
+    fig, axes, panels, plt = _grid_panels(summary_csv)
+    y = np.arange(len(COMPONENTS))[::-1]
+    for ax, sel in panels:
+        c4 = np.array([float(sel[c]["c4_med"]) for c in COMPONENTS])
+        err = [float(sel[c]["c4_iqr"]) / 2 for c in COMPONENTS]
+        ax.barh(y, c4, height=0.7, color=np.where(c4 > 0, "#e34948", "#2a78d6"), xerr=err,
+                error_kw={"lw": 0.8, "ecolor": "#2c2c2a"})
+        ax.axvline(0, color="#5f5e5a", lw=0.8)
+    labels = [c + (" *" if panels[0][1][c]["memory_bound"] == "True" else "") for c in COMPONENTS]
+    axes[0, 0].set_yticks(y, labels)
+    for ax in axes[-1]:
+        ax.set_xlabel("C4 = C3 − C2", fontsize=8)
+    fig.suptitle("F7. Waste score C4 per component (red: energy share exceeds compute share; * memory-bound in every config)", fontsize=10)
+    fig.tight_layout()
+    for ext in ("png", "svg"):
+        fig.savefig(FIGURES / f"F7.{ext}", dpi=200)
+    plt.close(fig)

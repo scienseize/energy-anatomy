@@ -2,7 +2,7 @@
 
 This file records how the code in this repository produces every number used in the thesis, at the level of detail needed to write the Methodology chapter and to defend the Results and Discussion chapter. DESIGN.md is the specification; this file records what was implemented, the conventions it fixes, where it departs from the specification, and its known limitations. Section and file references point at the code that implements each statement.
 
-Status (2026-10-16): the analytical model, the tables T2 and figure F6 derived from it, and the profiling harness are implemented and tested. One smoke-test configuration has been measured on the Kaggle T4 (Section 12). The full grid has not been measured yet. Every number in Section 9 is analytical (computed, not measured).
+Status (2026-10-17): the full grid has been measured on the Kaggle T4 (Section 13). Raw data are in `data/raw/`. The analysis (shares, C4, decision rule) is not implemented yet. Every number in Section 9 is analytical (computed, not measured).
 
 ## 1. Scope and provenance
 
@@ -233,9 +233,9 @@ Observations for the Results and Discussion chapter:
 5. **The T4 is power-capped and its clocks cannot be locked.** The smoke test showed every unit drawing 63 to 70 W against the 70 W cap, with SM clocks at 27 to 76% of maximum after the first unit. Three consequences follow. Energy shares closely track time shares (power is nearly constant across units). Compute-bound units run well below the boost-clock peak that sets the analytical ridge, so measured times exceed t_hat by about 2.6 to 2.9x for matmul units. And clock state depends on recent thermal history, which pre-conditioning (Section 6, step 0) controls but cannot remove. Clocks and throttle reasons are recorded per pass, and throttled passes are flagged, not dropped.
 6. **Isolation.** Units measured in isolation see cold inputs from rotating buffers. In a real training step some inputs are warm in L2. Unattributed energy (E_total minus the sum of components) bounds the combined effect of isolation and of the work outside every component.
 7. **Measurement windows span R repetitions** (at least 2 s), because the NVML energy counter updates far more slowly than a single small kernel runs. Energy per repetition is an average over the window, not a per-kernel reading.
-8. **Expected OOM at the largest configurations.** The 6.9B block in FP32 at seq 2048 holds several float32 attention-score tensors of about 2 GB each and is expected to exceed 16 GB. If it does, that configuration has no block measurement. It is logged as `oom` and must be reported as a gap, not interpolated.
+8. **(Did not occur; see Section 13.) Expected OOM at the largest configurations.** The 6.9B block in FP32 at seq 2048 holds several float32 attention-score tensors of about 2 GB each and is expected to exceed 16 GB. If it does, that configuration has no block measurement. It is logged as `oom` and must be reported as a gap, not interpolated.
 9. **Absolute energy is not reproducible across sessions to better than about 16%.** Two smoke runs of the same configuration, with identical software, differed by 16% in total energy, with higher clocks in every unit of the second run (Section 12). The likely cause is a different physical T4 or different cooling; the first two runs did not record the device. Shares (C3, C4) were stable to within 0.011, so the thesis conclusions rest on shares, and each configuration is measured within one session (Section 6, step 10). Absolute joules are reported as session-specific.
-10. **Only two smoke configurations have been measured.** All other quantitative statements above are analytical.
+10. **Shares and decision-rule outcomes are not computed by tested code yet.** Section 13 reports only data-quality facts about the full run. Section 9 is analytical.
 
 ## 11. Reproducing
 
@@ -312,3 +312,15 @@ The same configuration (Pythia 160M, seq 512, FP32), run on Kaggle with commit `
 | loss | 0.0006 | +0.0225 | +0.0279 |
 
 Every sign was preserved, and the largest change was 0.0101 (out_proj). This is the basis for treating shares, not absolute joules, as the reportable quantity (Section 10, limitation 9).
+
+## 13. Full profiling run (2026-10-16)
+
+The whole grid ran in one Kaggle session: run id `0cd31197`, one physical GPU (`gpu_uuid` ending `a4dce36505e2`), commit `52f319a` with no uncommitted changes, torch 2.11.0+cu128, CUDA 12.8, driver 580.178.04. Passes ran from 10:38:16 to 12:50:12 UTC (2 h 12 min, against a DESIGN estimate of 4 to 6 h). Raw files: `data/raw/passes.csv` (2,700 rows), `data/raw/idle.csv` (5 rows).
+
+**Coverage.** 18 configurations x 15 units x 10 passes = 2,700 rows, exactly 150 per configuration, with no duplicate (configuration, unit, pass) keys. No configuration was split across sessions.
+
+**Status.** 2,699 `ok` and 1 `short_window`: factorized_embed_out at Pythia 1.4B, seq 2048, FP16, pass 3, with a 1.991 s window at R = 65 (target 2 s). There were no `oom` rows. The 6.9B block in FP32 at seq 2048 fit in 16 GB, contrary to the earlier expectation (Section 10, limitation 8, which is now moot).
+
+**GPU state.** `throttle_reasons` was `sw_power_cap` in all 2,700 passes, and temperature stayed at 74 to 82 C. Windows lasted 2.00 to 4.91 s. The five idle windows (every 30 min) measured 34.2 to 36.3 W at 75 to 77 C.
+
+**Repeatability.** Across the 270 (configuration, unit) groups, IQR / median of energy per repetition has a median of 0.014. The largest values are 0.108 (mlp, 6.9B, 512, FP16), 0.104 (ln, 1.4B, 1024, FP16), 0.083 (ln, 6.9B, 1024, FP16) and 0.078 (block, 160M, 2048, FP32).

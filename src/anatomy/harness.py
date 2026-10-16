@@ -149,6 +149,13 @@ def _git_sha() -> str:
 
 def _append(path: Path, fields: list[str], row: dict) -> None:
     new = not path.exists()
+    if not new:
+        with open(path, newline="") as f:
+            header = next(csv.reader(f), [])
+        # Appending under a different header would shift every new value into the wrong column.
+        if header != fields:
+            raise ValueError(f"{path} has a different column layout; use a new --out folder.\n"
+                             f"file: {header}\nexpected: {fields}")
     with open(path, "a", newline="") as f:
         w = csv.DictWriter(f, fields)
         if new:

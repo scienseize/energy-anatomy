@@ -77,3 +77,12 @@ def test_gpu_window_samples_clocks_and_reasons(monkeypatch):
     assert (e, t) == (140.0, 2.0)
     assert 600 <= ctx["sm_clock_mhz"] <= 1500 and ctx["mem_clock_mhz"] == 5000 and ctx["temp_c"] == 75
     assert ctx["throttle_reasons"] == "sw_power_cap|sw_thermal" and ctx["power_limit_w"] == 70.0
+
+
+def test_refuses_to_append_under_a_different_header(tmp_path):
+    import pytest
+
+    (tmp_path / "passes.csv").write_text("run_id,ts,model\n")
+    with pytest.raises(ValueError, match="different column layout"):
+        harness.profile(resume=True, dry_run=True, out_dir=tmp_path)
+    assert (tmp_path / "passes.csv").read_text() == "run_id,ts,model\n"  # untouched

@@ -142,7 +142,7 @@ Implemented in `src/anatomy/harness.py`; run with `anatomy profile [--resume]`. 
 7. **Context** (revised 2026-10-16, after the smoke test). A background thread samples NVML every 0.1 s during each window. The row stores the mean SM and memory clocks over the window, the maximum temperature, the enforced power limit, and `throttle_reasons`: the union (bitwise OR) of NVML's clocks-event reasons over all samples, written as names (`sw_power_cap`, `sw_thermal`, `hw_slowdown`, `hw_thermal`, `hw_power_brake`, `gpu_idle`, ...). Kaggle grants no root, so clocks cannot be locked. A pass is flagged `throttled` if its mean SM clock is below 90% of the GPU's maximum SM clock (NVML; 1,590 MHz on the T4). Throttled passes are flagged, never dropped. The original rule (compare with pass 0 of the same unit) was replaced because the smoke test showed pass 0 is already power-capped, so that rule flagged 5 of 150 passes while every unit after the first ran at 27 to 76% of the maximum SM clock.
 8. **Status.** `ok`; `short_window` if the measured window came in under 2 s despite calibration (kept, flagged for the analysis); `oom` if the unit ran out of GPU memory. An OOM writes one `oom` row per remaining pass, frees memory, and moves on. It is never silently dropped.
 9. **Idle baseline** (decided 2026-10-16). After pre-conditioning, a 10 s idle window (device synchronized, then sleep inside a Zeus window) at the start of each session and whenever 30 minutes have passed since the last one, checked before every pass. Idle windows go to `data/raw/idle.csv`. Shares use total energy. The idle power x window time correction (dynamic energy) is an appendix sensitivity check only.
-10. **Persistence and resume.** Every pass is appended to `passes.csv` and the file is closed immediately, so a killed session loses at most the pass in progress. With `--resume`, any (configuration, unit, pass index) already present, of any status, is skipped. A partially measured unit is rebuilt, warmed up and recalibrated, and only its missing passes are measured, so its R may differ between sessions (energy per repetition stays comparable). Without `--resume`, all passes are appended again under a new run id, for deliberate reruns.
+10. **Persistence and resume.** Every pass is appended to `passes.csv` and the file is closed immediately, so a killed session loses at most the pass in progress. With `--resume`, any (configuration, unit, pass index) already present, of any status, is skipped. A partially measured unit is rebuilt, warmed up and recalibrated, and only its missing passes are measured, so its R may differ between sessions (energy per repetition stays comparable). Without `--resume`, all passes are appended again under a new run id, for deliberate reruns. Before appending, the harness checks that an existing `passes.csv` or `idle.csv` has exactly the current column layout and stops with an error otherwise, so rows are never written under a stale header (for example, the earlier smoke-test schema).
 11. **Device identity.** Kaggle provides two T4s. The harness sets `CUDA_DEVICE_ORDER=PCI_BUS_ID` before CUDA initializes and asserts that NVML device 0 and CUDA device 0 have the same PCI bus id. That way the energy counter, the clock readings and the workload all refer to the same physical GPU.
 
 ### 6.1 Kaggle procedure
@@ -172,7 +172,7 @@ The first session runs a smoke test (`SMOKE = True`): one 160M configuration int
 
 ## 8. Verification
 
-`uv run pytest` (31 tests):
+`uv run pytest` (32 tests):
 
 | Test | What it establishes |
 |---|---|
@@ -191,6 +191,7 @@ The first session runs a smoke test (`SMOKE = True`): one 160M configuration int
 | test_dry_run_full_grid_and_resume | The harness runs the full unit set on a tiny grid end to end with a fake monitor; resume adds nothing; a dropped last pass is redone exactly. |
 | test_oom_is_logged_and_run_continues | A unit that runs out of memory is logged as `oom` for each pass, and later units still run. |
 | test_gpu_window_samples_clocks_and_reasons | With stub NVML and Zeus objects, the GPU window averages the sampled clocks, takes the maximum temperature, and ORs the throttle-reason bits. |
+| test_refuses_to_append_under_a_different_header | An output file with a different column layout stops the run and is left untouched. |
 
 Verified on the T4 by the smoke test (Section 12): the Zeus energy counter, the NVML/CUDA device pinning, the memory-efficient attention kernel, and the full harness on one configuration. Not yet verified on the T4: the in-window NVML sampling and the pre-conditioning added after the smoke test (next Kaggle session), and the GPU-specific operator decomposition.
 
@@ -239,7 +240,7 @@ Observations for the Results and Discussion chapter:
 
 ```
 uv sync                        # Python 3.11 env from uv.lock
-uv run pytest                  # 31 tests
+uv run pytest                  # 32 tests
 uv run anatomy analytical      # data/derived/analytical.csv
 uv run anatomy report          # data/tables/T2.*, data/figures/F6.*
 uv run anatomy profile --dry-run   # harness end to end on CPU, fake energy, temp dir

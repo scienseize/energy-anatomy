@@ -1,0 +1,243 @@
+# Methods record: energy anatomy of transformer pretraining components
+
+This file records how the code in this repository produces every number used in the thesis, at the level of detail needed to write the Methodology chapter and to defend the Results and Discussion chapter. DESIGN.md is the specification; this file records what was implemented, the conventions it fixes, where it departs from the specification, and its known limitations. Section and file references point at the code that implements each statement.
+
+Status (2026-10-16): the analytical model, the tables T2 and figure F6 derived from it, and the profiling harness are implemented and tested. No energy has been measured yet. Every number in Section 9 is analytical (computed, not measured).
+
+## 1. Scope and provenance
+
+- **Hardware target.** A single NVIDIA T4 (16 GB GDDR6, 320 GB/s, 4 MiB L2, 70 W cap) on Kaggle. Peak rates in `configs/hardware/t4.yaml`: FP32 8.1 TFLOP/s (CUDA cores; Turing has no TF32, so FP32 matmuls also run here), FP16 16.2 TFLOP/s on CUDA cores (half2, twice FP32), FP16 65 TFLOP/s on tensor cores.
+- **Models.** Pythia 160M, 1.4B and 6.9B (EleutherAI). The architecture fields were transcribed from EleutherAI/pythia `models/*.yml` into Hugging Face `config.json` form (`configs/pythia/`), because the Hugging Face Hub was unreachable from the build environment. No weights are used (Section 2.3).
+- **Grid.** 3 models x sequence length {512, 1024, 2048} x precision {FP32, FP16} = 18 configurations, each processing 8,192 tokens per pass (batch = 8192 / seq_len, so 16, 8 or 4). Defined in `configs/grid.yaml`.
+- **Software.** Python 3.11, PyTorch 2.14.1 (local analytical runs), Zeus 0.16.0 for energy. Dependencies are pinned in `uv.lock`. `transformers` is used only in tests.
+- **Provenance per measurement.** Every row of `data/raw/passes.csv` carries the run id, timestamp, torch and CUDA versions, NVIDIA driver, and the git commit (suffix `+dirty` if tracked files had uncommitted changes).
+
+## 2. Models and units
+
+### 2.1 Architecture
+
+All modules reproduce the GPT-NeoX variant used by Pythia: parallel residual (`x + attn(ln1(x)) + mlp(ln2(x))`), LayerNorm with eps 1e-5, rotary embeddings on 25% of each head's dimensions (base 10000), exact (erf) GELU, biases on all attention and MLP linears, untied input and output embeddings, and no bias on the output projection. `src/anatomy/config.py` refuses any config that does not match this variant.
+
+| Model | Layers L | d_model | Heads | Head dim | Rotary dims | FFN | Vocab | Parameters (ours = published) | Non-embedding |
+|---|---|---|---|---|---|---|---|---|---|
+| Pythia 160M | 12 | 768 | 12 | 64 | 16 | 3072 | 50304 | 162,322,944 | 85,056,000 |
+| Pythia 1.4B | 24 | 2048 | 16 | 128 | 32 | 8192 | 50304 | 1,414,647,808 | 1,208,602,624 |
+| Pythia 6.9B | 32 | 4096 | 32 | 128 | 32 | 16384 | 50432 | 6,857,302,016 | 6,444,163,072 |
+
+Parameter counts summed over our modules match the published counts exactly (test `test_param_counts_match_published`).
+
+### 2.2 Units
+
+A *unit* is anything measured on its own: a baseline component, a substitution, or the full block. Each unit runs forward and backward on its own inputs, with a random `grad_output` for every output (except `loss`, whose scalar output is back-propagated directly). Defined in `src/anatomy/units.py`, `components.py` and `substitutions.py`.
+
+| Unit | What runs (forward; backward is autograd's) | Inputs | Count per model |
+|---|---|---|---|
+| embed_lookup | `Embedding(V, d)` gather | token ids (b, s) | 1 |
+| ln | `LayerNorm(d)` | (b, s, d) | 2L + 1 (two per block plus the final norm, pooled) |
+| attn_proj | fused QKV `Linear(d, 3d)` on the block input and output `Linear(d, d)` on the attention context | (b, s, d), (b, s, d) | L |
+| rope | rotary on the first rotary dims of Q and K, eager ops as in HF (`x*cos + rotate_half(x)*sin`, then concatenate the pass-through dims) | Q, K (b, h, s, hd) | L |
+| attn_core | `QK^T * hd^-0.5`, causal mask (`torch.where` with a boolean lower-triangular mask), softmax, `.V`, merge heads | Q, K, V (b, h, s, hd) | L |
+| mlp | `Linear(d, 4d)`, GELU, `Linear(4d, d)` | (b, s, d) | L |
+| out_proj | `Linear(d, V)` without bias | (b, s, d) | 1 |
+| loss | cross-entropy over (b*s) positions, mean reduction | logits (b, s, V), targets | 1 |
+| block | full parallel-residual block, including the QKV head split (views), rope and attn_core | (b, s, d) | L (denominator) |
+
+Model energy per configuration is E_total = L * E_block + E_embed_lookup + E_ln (final norm, one instance) + E_out_proj + E_loss. Component energy is E_unit * count per model, and Unattributed is E_total minus the sum of components (DESIGN section 4). Unattributed captures work that exists in the block but in no isolated unit: the residual additions, the strided QKV views feeding rope and attention, and inter-kernel effects.
+
+Isolated units receive fresh contiguous input tensors, while inside the block the same operations act on views. This difference is part of what Unattributed absorbs.
+
+### 2.3 Weights and initialization
+
+Weights are random (PyTorch default initialization). Energy depends on weight values only through small data-dependent power effects, which is stated as a limitation (Section 10).
+
+### 2.4 Precision
+
+- **FP32:** every tensor is float32.
+- **FP16:** the whole module is cast with `.half()`. Parameters, activations, softmax, LayerNorm, loss and gradients are all float16. This matches the GPT-NeoX/DeepSpeed fp16 mode Pythia was trained with, and keeps one dtype per configuration in the bytes model. No autocast is used.
+
+The current HF eager attention upcasts the softmax to float32 inside an otherwise fp16 model. Our `attn_core` keeps the softmax in float16, consistent with the pure-fp16 choice. The HF equivalence test therefore runs in FP32 (Section 8).
+
+## 3. Substitutions
+
+Each substitution replaces exactly one baseline unit, keeps its call signature, and is measured on every configuration with the same protocol (`src/anatomy/substitutions.py`).
+
+| Substitution | Replaces | Implementation |
+|---|---|---|
+| sdpa_core | attn_core | Fused causal attention through the memory-efficient backend, called directly (`aten._scaled_dot_product_efficient_attention`), so it cannot silently fall back to the math path. FlashAttention-2 is unsupported on the T4. Followed by the same merge-heads copy as attn_core. |
+| linear_core | attn_core | Causal linear attention (Katharopoulos et al., 2020), phi(x) = elu(x) + 1, with the normalizer phi(q).sum(phi(k)) and eps 1e-6. Chunked with C = 64: masked quadratic attention inside each chunk (including the diagonal), plus a prefix state over earlier chunks carried by an exclusive cumulative sum of per-chunk phi(K)^T V and phi(K) sums. |
+| gqa_proj | attn_proj | Fused projection `Linear(d, d + 2 * kv_heads * hd)` with kv_heads = heads / 4 (3, 4 and 8 for the three models), the K/V repeat to all heads materialized as in HF `repeat_kv` (expand + reshape, a real copy), and the output `Linear(d, d)`. Biases as in the baseline. |
+| factorized_embed (in) | embed_lookup | ALBERT style (Lan et al., 2020): `Embedding(V, E)` + `Linear(E, d)`, E = 128, no bias. |
+| factorized_embed (out) | out_proj | Mirrored: `Linear(d, E)` + `Linear(E, V)`, E = 128, no bias (like Pythia's embed_out). |
+| rmsnorm | ln (all 2L + 1) | Zhang and Sennrich (2019): `x * rsqrt(mean(x^2) + eps) * w`, eager ops in the run dtype. |
+
+The RQ5 metric is delta E_model = E_total(baseline) - E_total(with the substitution swapped in), as a percentage of baseline, per configuration.
+
+## 4. Analytical model
+
+Implemented in `src/anatomy/analytical.py`. Output: `data/derived/analytical.csv`, one row per (configuration, unit), 270 rows.
+
+### 4.1 Counting method
+
+FLOPs and bytes are not written out by hand per component. Each unit's real module runs one forward and backward step on PyTorch's `meta` device (shapes only, no data) under a dispatch-mode interceptor that sees every ATen operator autograd issues. This counts exactly the operator sequence the GPU will execute, for baseline units, substitutions and the block alike, with no separate formulas to keep in sync.
+
+- View and aliasing operators (`is_view`, `_unsafe_view`) and pure allocations (`new_empty_strided`) move no data and are skipped.
+- An operator without a FLOP rule stops the run with an error, so no operator is ever silently counted as zero.
+
+### 4.2 Bytes
+
+Bytes per operator = bytes read from every input tensor + bytes written to every output tensor, at the configuration's precision. No cache reuse is assumed between operators. This is the upper bound named in DESIGN section 7, and it matches the harness's rotating buffers, which defeat L2 reuse across repetitions.
+
+- A tensor's bytes are min(number of elements, storage size) * element size. A broadcast (expanded) tensor reads only its storage, while a slice reads only its own elements.
+- Write-only operators (`ones_like`, `scalar_tensor`) count no reads. `copy_` reads its source only. `nll_loss_backward` reads only the gradient and targets (its logits argument conveys a shape and is not read).
+- Token ids are int64 (8 bytes). The attention mask is bool (1 byte). LayerNorm's saved mean and rstd are float32 in both precisions (as on CUDA).
+
+### 4.3 FLOPs
+
+- **Matrix multiplications** (`mm`, `bmm`, `addmm`): 2mkn, plus mn for the fused bias of `addmm`. The backward pass is counted from its own traced matmuls, so it comes out at exactly twice the forward pass, as DESIGN section 7 specifies.
+- **Memory-efficient attention** (sdpa_core): forward 4 * b * h * s_q * s_k * hd, halved under the causal mask because the kernel skips fully masked tiles. Backward is 2.5x forward (five matmuls). Eager attn_core, by contrast, computes the full s x s scores.
+- **Elementwise and normalization operators:** a fixed per-element constant, applied to the largest operand (the output for elementwise operators, the input for reductions). These constants are a convention and are listed in full:
+
+| Operator | FLOPs per element | Basis |
+|---|---|---|
+| add, sub, mul, div, neg, where, pow, rsqrt, sum, mean, cumsum | 1 | |
+| elu, elu backward | 2 | |
+| gelu (exact) | 5 | 0.5 x (1 + erf(x / sqrt 2)) |
+| gelu backward | 10 | dy (Phi(x) + x phi(x)) |
+| softmax / log_softmax | 5 | max, subtract, exp, sum, divide |
+| softmax / log_softmax backward | 4 | |
+| layer norm | 8 | mean, variance (3), normalize (2), affine (2) |
+| layer norm backward | 15 | dx (10) + dgamma, dbeta (5) |
+| nll loss forward / backward | 1 | per target |
+| embedding backward | 1 | per gathered gradient element |
+| embedding (gather), cat, clone, copy, flip, slice backward, fills | 0 | data movement only |
+
+Because the elementwise constants are conventions, only the order of magnitude of a memory-bound unit's C1 is meaningful. The flags are robust to them: purely elementwise units sit one to three orders of magnitude below their ridge, and the units closest to a ridge (attn_core, sdpa_core, factorized_embed) get their FLOPs almost entirely from exactly counted matmuls (for attn_core, elementwise operators are 0.8% of FLOPs).
+
+### 4.4 Roofline quantities
+
+- **C1** = FLOPs / bytes for one unit instance, forward + backward.
+- **Peaks.** Matmul FLOPs use the tensor-core peak in FP16 and the FP32 CUDA-core peak in FP32. All other FLOPs use the CUDA-core peak of the precision.
+- **Effective peak for mixed units** (decided 2026-10-15). A unit whose FLOPs split between matmul and elementwise work (attn_core, mlp, the block) gets P_eff = F / (F_mm / P_mm + F_ew / P_ew), the harmonic, FLOP-weighted peak.
+- **Ridge** = P_eff / bandwidth. For pure-matmul units this is 25.3 FLOP/B in FP32 and 203 FLOP/B in FP16. For pure elementwise units it is 25.3 (FP32) and 50.6 (FP16).
+- **Memory-bound** if C1 < ridge. This flag decides which (component, configuration) pairs enter the H1 test.
+- **Predicted time** t_hat = max(F / P_eff, bytes / bandwidth), per instance.
+- **C2** = FLOPs_unit * count per model / total model FLOPs, where total model FLOPs is the sum over the eight baseline components (so the C2 values of the baseline components sum to 1 by construction). For a substitution unit, C2 is its share within the model that has that substitution swapped in. For factorized_embed, both the in and out units are swapped together. The block row has no C2.
+
+## 5. Tables and figures produced so far
+
+- **T2** (`data/tables/T2.csv`, `.md`): the 18 configurations with model dimensions, parameter counts, batch, tokens, precision, and a `profiled` flag. The flag becomes true once `data/raw/passes.csv` holds any `ok` pass for that configuration.
+- **F6** (`data/figures/F6.png`, `.svg`): roofline scatter of the eight baseline components, one panel per precision. The x axis is analytical C1; the y axis is the analytical attainable rate F / t_hat. Roof lines show the CUDA-core and (FP16) tensor-core peaks with their ridge points. Colors follow a fixed categorical order per component, and each component also has its own marker shape, so identity does not depend on color alone. Measured rates will be overlaid once profiling data exist.
+
+## 6. Measurement protocol as implemented
+
+Implemented in `src/anatomy/harness.py`; run with `anatomy profile [--resume]`. Protocol constants live in `configs/protocol.yaml`.
+
+1. **Order** (decided 2026-10-16). Configuration-major in grid order: all 15 units of a configuration before the next configuration, smallest model first (160M, then 1.4B, then 6.9B; within a model, seq 512 to 2048, FP32 then FP16). If a session ends early, every finished configuration is complete and can be analyzed on its own.
+2. **Build.** The module is built once per (configuration, unit) on `cuda:0` and cast to the run dtype.
+3. **Rotating buffers.** K independent (inputs, grad_outputs) sets with K = max(2, ceil(4 x 4 MiB / bytes per set)). Repetition i uses set i mod K, so consecutive repetitions never find their inputs in L2. Weights are not rotated.
+4. **Warm-up.** 20 forward + backward iterations, discarded.
+5. **Calibration** (decided 2026-10-16). A timed probe runs n = 1, 2, 4, ... repetitions between two device synchronizations until the probe lasts at least 0.2 s. Then R = ceil(1.1 x 2 s / t_rep), with a 10% margin. R is fixed for all passes of that unit in that session.
+6. **Passes.** N = 10. Each pass is: Zeus `begin_window` (synchronizes the device, then reads the NVML energy counter), R x (forward on buffer i mod K, `backward(grad_output)`, then set every parameter and input `.grad` to None, so every repetition does identical work with no gradient accumulation), and `end_window` (synchronizes, reads the counter). The row stores energy_j, time_s, energy per repetition = energy_j / R, and average power = energy_j / time_s.
+7. **Context.** After each window the harness records the SM and memory clocks, GPU temperature and enforced power limit (NVML). Kaggle grants no root, so clocks cannot be locked. Instead, a pass is flagged `throttled` if its SM clock is below 90% of the SM clock of pass 0 for that unit. Throttled passes are flagged, never dropped.
+8. **Status.** `ok`; `short_window` if the measured window came in under 2 s despite calibration (kept, flagged for the analysis); `oom` if the unit ran out of GPU memory. An OOM writes one `oom` row per remaining pass, frees memory, and moves on. It is never silently dropped.
+9. **Idle baseline** (decided 2026-10-16). A 10 s idle window (device synchronized, then sleep inside a Zeus window) at the start of each session and whenever 30 minutes have passed since the last one, checked before every pass. Idle windows go to `data/raw/idle.csv`. Shares use total energy. The idle power x window time correction (dynamic energy) is an appendix sensitivity check only.
+10. **Persistence and resume.** Every pass is appended to `passes.csv` and the file is closed immediately, so a killed session loses at most the pass in progress. With `--resume`, any (configuration, unit, pass index) already present, of any status, is skipped. A partially measured unit is rebuilt, warmed up and recalibrated, and only its missing passes are measured, so its R may differ between sessions (energy per repetition stays comparable). Without `--resume`, all passes are appended again under a new run id, for deliberate reruns.
+11. **Device identity.** Kaggle provides two T4s. The harness sets `CUDA_DEVICE_ORDER=PCI_BUS_ID` before CUDA initializes and asserts that NVML device 0 and CUDA device 0 have the same PCI bus id. That way the energy counter, the clock readings and the workload all refer to the same physical GPU.
+
+### 6.1 Kaggle procedure
+
+`notebooks/kaggle_profile.ipynb`:
+1. Clone the repository at a chosen ref and run `pip install -e .[gpu]`.
+2. Print `nvidia-smi` identity, driver, power limit and maximum SM clock.
+3. Copy `passes.csv` / `idle.csv` from a previous session's output (attached as notebook input) into the output folder.
+4. Check that Zeus reads nonzero energy over a matmul loop; abort otherwise.
+5. Run `anatomy profile --resume --out /kaggle/working/raw`.
+6. Print a status and per-configuration summary.
+
+The first session runs a smoke test (`SMOKE = True`): one 160M configuration into a separate `smoke/` folder, so smoke rows never mix with the real run.
+
+## 7. Data schemas
+
+`data/raw/passes.csv` (append-only, one row per pass):
+`run_id, ts, model, seq_len, precision, tokens, unit, unit_kind{component|substitution|block}, pass_idx, reps, energy_j, time_s, energy_per_rep_j, avg_power_w, sm_clock_mhz, mem_clock_mhz, temp_c, power_limit_w, throttled, status{ok|short_window|oom}, torch, cuda, driver, git_sha`
+
+`power_limit_w` was added to the DESIGN section 9 schema on 2026-10-16, because DESIGN section 6 requires recording the power limit. Substitution unit names in this file are `sdpa_core, linear_core, gqa_proj, factorized_embed_in, factorized_embed_out, rmsnorm`.
+
+`data/raw/idle.csv`: `run_id, ts, energy_j, time_s, avg_power_w, sm_clock_mhz, mem_clock_mhz, temp_c, power_limit_w`
+
+`data/derived/analytical.csv`: `model, seq_len, precision, component, count_per_model, flops, bytes, c1, ridge, memory_bound, c2, t_hat`. Here `flops`, `bytes` and `t_hat` are per unit instance, forward + backward. `component` holds the unit name, including substitutions and `block`.
+
+## 8. Verification
+
+`uv run pytest` (30 tests):
+
+| Test | What it establishes |
+|---|---|
+| test_param_counts_match_published (x3) | Our modules assemble to exactly the published Pythia parameter counts, total and non-embedding. |
+| test_grid | The grid has 18 configurations, each with batch x seq_len = 8,192 tokens. |
+| test_linear_flops_and_bytes_by_hand | The traced count for out_proj equals the hand formula: 3 x 2nkd FLOPs and the exact reads and writes of the forward, dX and dW matmuls. |
+| test_layernorm_flops_and_bytes_by_hand | The traced LayerNorm count equals the hand formula (23 FLOPs per element; exact bytes). |
+| test_c2_sums_to_one | C2 over the baseline components sums to 1 in every configuration. |
+| test_memory_bound_flags | Embedding, LN, RoPE, loss and RMSNorm are memory-bound everywhere; attn_proj, mlp and out_proj nowhere. |
+| test_row_order_invariant | Results do not depend on row order. |
+| test_every_unit_steps_on_cpu (x15) | Every unit runs forward + backward and leaves no stale gradients. |
+| test_block_matches_hf_gptneox_layer | Our block matches HF `GPTNeoXLayer` (transformers 5.19, eager attention) within 1e-4 for identical weights, at 160M dimensions, FP32, CPU. |
+| test_sdpa_core_matches_attn_core | The fused path equals eager attention within tolerance (CPU math backend; the GPU uses the memory-efficient kernel). |
+| test_linear_core_matches_quadratic_reference | The chunked linear attention equals the direct quadratic causal formulation (float64). |
+| test_substitution_shapes_and_gqa_heads | Each substitution produces outputs of the same total size as the unit it replaces; kv heads are 3, 4 and 8. |
+| test_dry_run_full_grid_and_resume | The harness runs the full unit set on a tiny grid end to end with a fake monitor; resume adds nothing; a dropped last pass is redone exactly. |
+| test_oom_is_logged_and_run_continues | A unit that runs out of memory is logged as `oom` for each pass, and later units still run. |
+
+Not yet verified (needs the T4): the Zeus energy counter on Kaggle, the memory-efficient attention kernel on the GPU, and the GPU-specific operator decomposition. The Kaggle smoke test covers the first.
+
+## 9. Analytical outcome (before measurement)
+
+All values are analytical (Section 4), across the 18 configurations. They are not measurements.
+
+| Unit | Memory-bound configs | C1 range (FLOP/B) | C2 range |
+|---|---|---|---|
+| embed_lookup | 18/18 | 0.0175 to 0.035 | 9.5e-08 to 9.6e-07 |
+| ln | 18/18 | 1.15 to 2.3 | 1.4e-04 to 5.5e-04 |
+| attn_proj | 0/18 | 199 to 1760 | 0.175 to 0.316 |
+| rope | 18/18 | 0.054 to 0.107 | 1.8e-05 to 6.9e-05 |
+| attn_core | 18/18 | 9.19 to 38.5 | 0.020 to 0.237 |
+| mlp | 0/18 | 161 to 1470 | 0.350 to 0.633 |
+| out_proj | 0/18 | 346 to 2590 | 0.029 to 0.290 |
+| loss | 18/18 | 0.321 to 0.643 | 1.1e-05 to 5.7e-04 |
+| sdpa_core | 6/18 | 49.7 to 398 | 0.012 to 0.151 |
+| linear_core | 18/18 | 3.26 to 8.63 | 0.008 to 0.019 |
+| gqa_proj | 0/18 | 110 to 1050 | 0.117 to 0.224 |
+| factorized_embed_in | 9/18 | 32.4 to 107 | 7.5e-05 to 9.7e-04 |
+| factorized_embed_out | 9/18 | 62.7 to 125 | 1.0e-03 to 0.064 |
+| rmsnorm | 18/18 | 0.125 to 0.25 | 9.3e-05 to 3.6e-04 |
+| block | 4/18 | 26.2 to 600 | n/a |
+
+Observations for the Results and Discussion chapter:
+- **H1 coverage.** All four tested components (embedding lookup, layer normalization pooled with the final norm, RoPE, attn_core) are memory-bound in all 18 configurations, so the decision rule evaluates each on all 18. The attention split is therefore not confounded by sequence length: eager attn_core is memory-bound even at seq 512.
+- **Near the ridge.** attn_core's C1 reaches 38.5 in FP16 against an effective ridge of 193 to 198. In FP32 it reaches 19.2 against 25.3, the closest any tested component comes to its ridge (factor 1.3).
+- **C2 near zero.** Embedding, LN, RoPE and loss have C2 between 1e-7 and 6e-4. Any measured energy share for them will make C4 roughly equal to C3. This is the "C2 near 0" situation DESIGN section 8 guards against with energy per FLOP.
+- **Substitutions move units across the ridge.** sdpa_core is compute-bound except in FP16 at seq 512 and 1024 (6/18). Both factorized_embed units are memory-bound exactly in the 9 FP16 configurations. linear_core stays memory-bound everywhere.
+- **The block.** The full block is memory-bound in 4 FP16 configurations (160M at every sequence length, 1.4B at 2048), driven by the s x s attention traffic.
+
+## 10. Limitations
+
+1. **Bytes are an upper bound at operator level.** Operators implemented as several GPU kernels (for example LayerNorm backward reads x and dy twice) are undercounted relative to a kernel-level count. Tile re-reads inside fused kernels (memory-efficient attention) are not counted. Operators that fuse on the GPU but not on the meta device would be overcounted.
+2. **Elementwise FLOP constants are conventions** (Section 4.3); C1 for memory-bound units is meaningful only to an order of magnitude.
+3. **Analytical counts come from the meta device.** Autograd formulas are device-independent, but backend kernel choices are not observed. In particular, the stride-restoring copies autograd inserts for attention gradients are counted as traced.
+4. **Random weights.** Data-dependent power effects of trained weights are not captured.
+5. **Clocks cannot be locked on Kaggle.** Clocks are recorded per pass and throttled passes are flagged; frequency variation remains a source of variance.
+6. **Isolation.** Units measured in isolation see cold inputs from rotating buffers. In a real training step some inputs are warm in L2. Unattributed energy (E_total minus the sum of components) bounds the combined effect of isolation and of the work outside every component.
+7. **Measurement windows span R repetitions** (at least 2 s), because the NVML energy counter updates far more slowly than a single small kernel runs. Energy per repetition is an average over the window, not a per-kernel reading.
+8. **Expected OOM at the largest configurations.** The 6.9B block in FP32 at seq 2048 holds several float32 attention-score tensors of about 2 GB each and is expected to exceed 16 GB. If it does, that configuration has no block measurement. It is logged as `oom` and must be reported as a gap, not interpolated.
+9. **No measured numbers exist yet.** Every quantitative statement above is analytical.
+
+## 11. Reproducing
+
+```
+uv sync                        # Python 3.11 env from uv.lock
+uv run pytest                  # 30 tests
+uv run anatomy analytical      # data/derived/analytical.csv
+uv run anatomy report          # data/tables/T2.*, data/figures/F6.*
+uv run anatomy profile --dry-run   # harness end to end on CPU, fake energy, temp dir
+```
+On Kaggle: run `notebooks/kaggle_profile.ipynb` (Section 6.1). Results land in `/kaggle/working/raw/` and are copied into `data/raw/` in the repository.

@@ -160,7 +160,9 @@ Sanity outputs written alongside: Σ C2 = 1, Σ C3 + Unattributed = 1, Σ C4 ove
 ## 9. Data schemas
 
 `data/raw/passes.csv` (append-only):
-`run_id, ts, model, seq_len, precision, tokens, unit, unit_kind{component|substitution|block}, pass_idx, reps, energy_j, time_s, energy_per_rep_j, avg_power_w, sm_clock_mhz, mem_clock_mhz, temp_c, throttled, status, torch, cuda, driver, git_sha`
+`run_id, ts, model, seq_len, precision, tokens, unit, unit_kind{component|substitution|block}, pass_idx, reps, energy_j, time_s, energy_per_rep_j, avg_power_w, sm_clock_mhz, mem_clock_mhz, temp_c, power_limit_w, throttled, status{ok|short_window|oom}, torch, cuda, driver, git_sha` (`power_limit_w` added 2026-10-16, decision 16)
+
+`data/raw/idle.csv`: `run_id, ts, energy_j, time_s, avg_power_w, sm_clock_mhz, mem_clock_mhz, temp_c, power_limit_w` (decision 15)
 
 `data/derived/analytical.csv`: `model, seq_len, precision, component, count_per_model, flops, bytes, c1, ridge, memory_bound, c2, t_hat`
 
@@ -190,6 +192,16 @@ Sanity outputs written alongside: Σ C2 = 1, Σ C3 + Unattributed = 1, Σ C4 ove
 6. ~~Hosting, Python, deps~~ **Decided: public GitHub, uv (lockfile), Python 3.11; Kaggle runs `pip install -e .`.** Repo: scienseize/energy-anatomy.
 7. ~~Own vs HF modules~~ **Decided: own minimal modules; test full-block output equals HF GPTNeoXLayer for identical weights (transformers as a test-only dependency).**
 8. ~~LN pooling~~ **Decided: ln + final_ln pooled as one component (RQ1.3).**
+9. ~~FP16 mode~~ **Decided (2026-10-15): pure `.half()`** (params, activations, softmax, LN, loss in fp16; matches Pythia's GPT-NeoX/DeepSpeed fp16), no autocast.
+10. ~~Peak for mixed components~~ **Decided (2026-10-15): effective peak** P_eff = F / Σ(F_k/P_k); ridge = P_eff/BW; t̂ = max(F/P_eff, B/BW).
+11. ~~linear_core chunk size~~ **Decided (2026-10-15): C = 64.**
+12. ~~factorized_embed bias~~ **Decided (2026-10-15): no bias** on either projection.
+13. ~~Run order~~ **Decided (2026-10-16): config-major, smallest model first** (all units of a config before the next).
+14. ~~R calibration~~ **Decided (2026-10-16): one timed probe** (≥ 0.2 s), R = ceil(1.1 × T_min / t_rep); windows still < T_min get `status=short_window`.
+15. ~~Idle storage~~ **Decided (2026-10-16): separate `data/raw/idle.csv`.**
+16. ~~Power limit column~~ **Decided (2026-10-16): add `power_limit_w` to passes.csv.**
+
+Implementation notes (how the code realizes the above; full detail in `docs/methods.md`): FLOPs and bytes are traced per ATen op on the meta device rather than hand-enumerated; the Section 3 layout is collapsed to one file each for components, substitutions, analytical, harness and report, plus `units.py` as the shared unit registry.
 
 ## 12. Build order (maps to plan dates)
 

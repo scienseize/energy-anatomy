@@ -134,3 +134,16 @@ def test_removal_substitution_costs_nothing():
     base = L * 10.0 + 1.0 + 0.5 + 2.0 + 1.0
     assert set(rows) == {"nope"}  # measured substitutions absent from this session are skipped
     assert rows["nope"]["e_total_sub_j"] == pytest.approx(base - L * 0.2)
+
+
+def test_attention_combined_is_sum_of_parts(measured):
+    """RQ1.1: combined attention C2 and per-pass C3 equal attn_proj + attn_core."""
+    passes, idle, an = measured
+    pp = A.per_pass(passes, idle, an, 10)
+    comb = A.attention_combined(pp, an)
+    assert len(comb) == 18
+    summ = {(r["model"], r["seq_len"], r["precision"], r["component"]): r for r in A.summarize(pp, an, passes)}
+    for r in comb:
+        k = (r["model"], r["seq_len"], r["precision"])
+        assert r["c2"] == pytest.approx(summ[(*k, "attn_proj")]["c2"] + summ[(*k, "attn_core")]["c2"])
+        assert r["c4_med"] == pytest.approx(r["c3_med"] - r["c2"])

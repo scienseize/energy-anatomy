@@ -21,7 +21,8 @@ RAW, DERIVED = DATA / "raw", DATA / "derived"
 TESTED = ("embed_lookup", "ln", "rope", "attn_core")  # H1 components; ln is pooled with the final norm
 USABLE = ("ok", "short_window")  # short windows are kept (flagged); oom rows carry no energy
 MODEL_ORDER = ("pythia-160m", "pythia-1.4b", "pythia-6.9b")
-COMP_ORDER = (*COMPONENTS, "unattributed")
+COMP_ORDER = (*COMPONENTS[:5], "attention", *COMPONENTS[5:], "unattributed")
+ATTENTION = ("attn_proj", "attn_core")  # RQ1.1 asks about attention as one component
 SUB_ORDER = (*dict.fromkeys(sub for sub, _ in SUBSTITUTIONS.values()), *REMOVALS)
 MANUAL = DATA / "manual" / "substitutions.csv"
 
@@ -124,6 +125,24 @@ def per_pass(passes: list[dict], idle: list[dict], analytical: list[dict], n_pas
                             "pass_idx": j, "energy": kind or "total", "c3": 1 - sum(ec.values()) / total,
                             "c4": None, "c3_components": None})
     return out
+
+
+def attention_combined(pp: list[dict], analytical: list[dict]) -> list[dict]:
+    """RQ1.1: attention as one component = attn_proj + attn_core, summed per matched pass (shares
+    are additive), then median and IQR. Reported only: the decision rule tests attn_core alone."""
+    an = {(r["model"], int(r["seq_len"]), r["precision"], r["component"]): r for r in analytical}
+    g = defaultdict(lambda: defaultdict(float))
+    for r in pp:
+        if r["component"] in ATTENTION and r["energy"] == "total":
+            g[(r["model"], r["seq_len"], r["precision"])][r["pass_idx"]] += r["c3"]
+    out = []
+    for (m, s_, p), by_pass in g.items():
+        c2 = sum(float(an[(m, s_, p, c)]["c2"]) for c in ATTENTION)
+        c3 = list(by_pass.values())
+        out.append({"model": m, "seq_len": s_, "precision": p, "component": "attention", "c1": None, "c2": c2,
+                    "c3_med": float(np.median(c3)), "c3_iqr": iqr(c3),
+                    "c4_med": float(np.median([x - c2 for x in c3])), "c4_iqr": iqr([x - c2 for x in c3])})
+    return sorted(out, key=grid_order)
 
 
 def summarize(pp: list[dict], analytical: list[dict], passes: list[dict]) -> list[dict]:
@@ -378,8 +397,10 @@ def run(passes_csv: Path = RAW / "passes.csv", idle_csv: Path = RAW / "idle.csv"
     _write(DERIVED / "shares_dynamic.csv", [r for r in pp if r["energy"] == "_dyn"])
     _write(DERIVED / "shares_summary.csv", summary)
 
-    t5 = [{k: r[k] for k in ("model", "seq_len", "precision", "component", "c1", "c2", "c3_med", "c3_iqr")}
-          for r in summary]
+    attention = attention_combined(pp, analytical)
+    _write(DERIVED / "attention_combined.csv", attention)
+    t5 = sorted([{k: r[k] for k in ("model", "seq_len", "precision", "component", "c1", "c2", "c3_med", "c3_iqr")}
+                 for r in (*summary, *attention)], key=grid_order)
     t7 = [{k: r[k] for k in ("model", "seq_len", "precision", "component", "memory_bound", "c4_med", "c4_iqr",
                              "rank_c4")} for r in summary if r["component"] != "unattributed"]
     t6 = [{"component": c, **decide([(r["memory_bound"], r["c4_med"], r["c4_iqr"])

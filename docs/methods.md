@@ -416,11 +416,18 @@ From T10 (median over passes; positive = saving; "saves" counts configurations w
 | rmsnorm (eager) | ln | -5.21 (160M/512/FP16) to -0.61 (6.9B/2048/FP32) | 0/18 | 18 |
 | rmsnorm_fused | ln | +0.00 (6.9B/1024/FP32) to +0.44 (160M/512/FP16) | 16/18 | 0 |
 
-**Algorithm vs implementation (RMSNorm).** Per instance, within run 2, the eager rmsnorm used 3.0 to 4.0 times the energy of LayerNorm (median 3.2), while rmsnorm_fused used 0.78 to 1.00 times (median 0.91). The fused kernel therefore ran on the T4 (the notebook's dispatch log is the direct evidence; see the note below). The RMSNorm algorithm saves up to 0.44% of model energy relative to LayerNorm. Writing it as six eager operators turns that into a 0.6 to 5.2% loss. For the thesis, the implementation of a normalization layer matters more for energy than the choice between LayerNorm and RMSNorm.
+**Algorithm vs implementation (RMSNorm).** Per instance, within run 2, the eager rmsnorm used 3.0 to 4.0 times the energy of LayerNorm (median 3.2), while rmsnorm_fused used 0.78 to 1.00 times (median 0.91). The fused kernel ran on the T4: the run 2 notebook's dispatch log (below) shows a single fused operator forward and backward in both precisions. The RMSNorm algorithm saves up to 0.44% of model energy relative to LayerNorm. Writing it as six eager operators turns that into a 0.6 to 5.2% loss. For the thesis, the implementation of a normalization layer matters more for energy than the choice between LayerNorm and RMSNorm.
 
 **Attention substitutions** save the most at small models and long sequences in FP16, where attn_core's waste is largest (Section 15). sdpa_core saves energy everywhere. linear_core costs slightly more in 2 configurations (1.4B/512/FP16, -2.39%; 6.9B/512/FP16, -1.19%). rmsnorm_fused's saving exceeds its IQR everywhere except 6.9B/1024/FP32 and 6.9B/2048/FP32, where it is below 0.001%.
 
-Note: the provenance log from the run 2 notebook (which operators `F.rms_norm` dispatched to) is to be recorded here.
+**Provenance (run 2 notebook, Tesla T4).** ATen operators dispatched by `F.rms_norm` forward + backward, from the dispatch-mode log cell:
+
+```
+2.11.0+cu128 torch.float32 -> ['aten._fused_rms_norm', 'aten.ones_like', 'aten._fused_rms_norm_backward']
+2.11.0+cu128 torch.float16 -> ['aten._fused_rms_norm', 'aten.ones_like', 'aten._fused_rms_norm_backward']
+```
+
+(`ones_like` is the test's own gradient seed.) This also confirms the analytical treatment of rmsnorm_fused as one operator forward and one backward (Section 4.1).
 
 ## 17. Repeatability across runs (run 1 vs run 2)
 

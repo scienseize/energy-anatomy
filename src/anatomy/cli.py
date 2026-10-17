@@ -24,6 +24,8 @@ def main() -> None:
         from anatomy import report
 
         print(f"T2: {len(report.t2())} configs")
+        if (report.DATA / "manual" / "sources.csv").exists():
+            print(f"T3: {len(report.t3())} sources")
         report.f6()
         print("F6 -> data/figures/F6.{png,svg}")
     elif args.cmd == "analyze":

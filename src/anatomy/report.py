@@ -24,6 +24,15 @@ def write_table(name: str, rows: list[dict]) -> None:
     (TABLES / f"{name}.md").write_text("\n".join(md) + "\n")
 
 
+def t3(sources: Path = DATA / "manual" / "sources.csv") -> list[dict]:
+    """T3: Phase 1 screening log, every source the study cites scored against Table 1 (curated by hand)."""
+    with open(sources) as f:
+        rows = [{k: r[k] for k in ("id", "citation", "year", "venue", "used_as", "content", "training_relevance",
+                                   "recency", "verifiability", "model_scale", "decision")} for r in csv.DictReader(f)]
+    write_table("T3", rows)
+    return rows
+
+
 def t2() -> list[dict]:
     """T2: the profiled grid. A config counts as profiled once any unit has an ok pass."""
     done = set()

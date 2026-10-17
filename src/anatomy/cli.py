@@ -8,6 +8,7 @@ def main() -> None:
     sub.add_parser("analytical", help="write data/derived/analytical.csv")
     sub.add_parser("report", help="write T2 and F6 (needs analytical.csv)")
     sub.add_parser("analyze", help="shares, C4, decision rule: T4-T7 (needs passes.csv, analytical.csv)")
+    sub.add_parser("export", help="write data/export/*.json for the dashboard (needs anatomy analyze)")
     prof = sub.add_parser("profile", help="measure the grid on the GPU, appending to data/raw/passes.csv")
     prof.add_argument("--resume", action="store_true", help="skip (config, unit, pass) rows already recorded")
     prof.add_argument("--dry-run", action="store_true", help="tiny dims on CPU with a fake monitor (no real energy)")
@@ -39,6 +40,11 @@ def main() -> None:
         report.f9()
         for r in res["t6"]:
             print(f"{r['component']:13s} {r['both']}/{r['memory_bound']} memory-bound configs -> {r['verdict']}")
+    elif args.cmd == "export":
+        from anatomy.export import write
+
+        for path in write():
+            print(f"-> {path.relative_to(path.parents[2])}")
     elif args.cmd == "profile":
         import tempfile
 

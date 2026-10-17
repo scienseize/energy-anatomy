@@ -194,7 +194,7 @@ The first session runs a smoke test (`SMOKE = True`): one 160M configuration int
 
 ## 8. Verification
 
-`uv run pytest` (46 tests):
+`uv run pytest` (50 tests):
 
 | Test | What it establishes |
 |---|---|
@@ -221,6 +221,9 @@ The first session runs a smoke test (`SMOKE = True`): one 160M configuration int
 | test_summary_invariant_to_row_order | Shuffling the raw rows changes no median and no rank. |
 | test_substitution_delta_by_hand | The substituted model total and delta % equal the hand calculation, with negative meaning the substitution costs more; unmeasured substitutions are skipped. |
 | test_rmsnorm_fused_matches_eager | The fused and eager RMSNorm units compute the same function. |
+| test_quadrant_split | F8 quadrant boundaries: C4 = 0 is not waste; the median capability rank falls in the lower-capability half. |
+| test_rank_shift_sign | A component moving from rank 5 to 2 has shift +3 (climbs toward more waste). |
+| test_value_parsing, test_export_copies_derived_values_without_computing | The JSON export is valid (no NaN), covers 18 configurations, and copies values from `shares_summary.csv` unchanged. |
 | test_refuses_to_append_under_a_different_header | An output file with a different column layout stops the run and is left untouched. |
 
 Verified on the T4 by the smoke test (Section 12): the Zeus energy counter, the NVML/CUDA device pinning, the memory-efficient attention kernel, and the full harness on one configuration. Not yet verified on the T4: the in-window NVML sampling and the pre-conditioning added after the smoke test (next Kaggle session), and the GPU-specific operator decomposition.
@@ -273,8 +276,9 @@ Observations for the Results and Discussion chapter:
 
 ```
 uv sync                        # Python 3.11 env from uv.lock
-uv run pytest                  # 46 tests
-uv run anatomy analyze         # shares, C4, decision rule: T4-T7, TA1-TA2, F5, F7
+uv run pytest                  # 50 tests
+uv run anatomy analyze         # shares, C4, rule, substitutions, capability: T4-T10, TA1-TA3, F5, F7-F10
+uv run anatomy export          # data/export/*.json for the dashboard
 uv run anatomy analytical      # data/derived/analytical.csv
 uv run anatomy report          # data/tables/T2.*, data/figures/F6.*
 uv run anatomy profile --dry-run   # harness end to end on CPU, fake energy, temp dir
@@ -501,3 +505,16 @@ Observations for the Results and Discussion chapter:
 - **Sequence length barely moves it** (6 of 48 cells, all by 1 except mlp at 6.9B FP32, +3). Longer sequences raise attn_core's C4 (Section 15) but cannot raise its rank above 1.
 - **Precision** changes 18 of 72 cells, mostly by 1 place, and only at 160M/512 and at 6.9B.
 - **The large shifts are all mlp at 6.9B FP32:** +6 (rank 8 to 2) and +5 under scale, +3 under sequence length, and -6 and -5 under precision. They come from mlp's C4 crossing zero in those configurations (+0.012 at 6.9B/1024/FP32), where C4 for mlp is not stable between runs (Section 17: mlp changed sign at 6.9B/512). These shifts should be reported as unstable, not as an effect of the moderators.
+
+## 19. Dashboard export
+
+`anatomy export` (`src/anatomy/export.py`) writes four JSON files to `data/export/` for the dashboard (DESIGN section 9, Phase 7). Values are copied from `data/derived/` and the tables without any computation, so the dashboard shows exactly the thesis numbers.
+
+| File | Content |
+|---|---|
+| configs.json | the 18 configurations (T2), each with an id `model/seq_len/precision` |
+| profile.json | per configuration: for each component C1, C2, memory-bound, C3 median and IQR, dynamic C3, energy per FLOP, median power; plus Unattributed |
+| ranking.json | per configuration: C4 median, IQR, dynamic C4 and rank; the decision rule (T6); capability with pooled C4 and quadrant (T8); the C5 rank shifts (F9) |
+| meta.json | export time, code commit, GPU, and the measurement run's ids, GPU UUID, commit, software versions and time span |
+
+Substitution results (T10) are not exported; DESIGN section 9 does not list them.

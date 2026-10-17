@@ -404,6 +404,7 @@ def run(passes_csv: Path = RAW / "passes.csv", idle_csv: Path = RAW / "idle.csv"
     _write(DERIVED / "rank_shifts.csv", shifts)
     t8 = capability_table(summary, t6, _read(CAPABILITY)) if CAPABILITY.exists() else []
     if t8:
+        _write(DERIVED / "capability.csv", t8)
         write_table("T8", _fmt(t8))
     write_table("T9", _fmt(t9))
     write_table("T10", _fmt(t10))

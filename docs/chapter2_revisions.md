@@ -1,6 +1,6 @@
 # Chapter II revisions: aligning the manuscript with the study as run
 
-Draft, 2026-10-17. Each item gives the manuscript's current text (quoted exactly from the Google Doc "manuscript alignment"), the proposed replacement, and why. Nothing is applied to the Google Doc until approved. All citations were checked by independent verifier agents (2026-10-17). The T4 is cited from NVIDIA's product page, which gives no date (n.d.); its bandwidth figure is "320+ GB/s", while the datasheet is reported as 300 GB/s, a difference that changes no tested result (methods.md section 4.4).
+**Applied to the Google Doc on 2026-10-17 after Bill approved all items** (26 exact-match replacements, each changing exactly one occurrence, pinned to the revision read beforehand; all 26 verified by reading the doc back; References now 61 entries, alphabetical). Draft, 2026-10-17. Each item gives the manuscript's current text (quoted exactly from the Google Doc "manuscript alignment"), the proposed replacement, and why. Nothing is applied to the Google Doc until approved. All citations were checked by independent verifier agents (2026-10-17). The T4 is cited from NVIDIA's product page, which gives no date (n.d.); its bandwidth figure is "320+ GB/s", while the datasheet is reported as 300 GB/s, a difference that changes no tested result (methods.md section 4.4).
 
 Two citation-disambiguation notes for APA 7 (both apply wherever these appear):
 - Two 2024 papers by authors named He: write **He and Hofmann (2024)** for *Simplifying Transformer Blocks* and **He, Sun, et al. (2024)** for *What Matters in Transformers?*
@@ -146,3 +146,5 @@ Notes:
 - Liger Kernel and xFormers are cited in Chapter III (substitution comparisons), not in these Chapter II revisions; they are listed so the References are complete once Chapter III is written.
 - The CVPR page range for Zhu et al. comes from catalog metadata (the CVF page could not be opened); the ICLR 2021 venue for H. W. Chung et al. comes from the conference listing. Both should be checked against the PDFs before submission.
 - Michel et al. (2019) and Press and Wolf (2017) are not added: they were excluded on 2026-10-17 (Table 1 recency).
+
+Formatting note: the 9 new references were inserted as plain text, matching the existing 52 (none of which use italics). APA 7 italicizes titles and journal names, so a formatting pass over the whole list is still needed.

@@ -1,0 +1,23 @@
+{
+ "exported_at": "2026-10-17T04:32:49+00:00",
+ "code_git_sha": "dcc5c7c",
+ "gpu": "NVIDIA T4",
+ "measurement": {
+  "run_ids": [
+   "4360bc50"
+  ],
+  "gpu_uuids": [
+   "GPU-b87f1288-4337-1b93-5715-59154059ef9e"
+  ],
+  "git_sha": [
+   "33799b8"
+  ],
+  "torch": "2.11.0+cu128",
+  "cuda": "12.8",
+  "driver": "580.178.04",
+  "first_pass": "2026-10-16T17:22:18+00:00",
+  "last_pass": "2026-10-16T19:35:34+00:00",
+  "passes": 2880
+ },
+ "notes": "Shares and waste from the main run in data/raw/; absolute joules are session-specific (docs/methods.md section 17)."
+}

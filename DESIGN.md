@@ -210,7 +210,7 @@ Sanity outputs written alongside: Σ C2 = 1, Σ C3 + Unattributed = 1, Σ C4 ove
 24. ~~T4 measured C3~~ **Decided (2026-10-17): renormalized over the 8 components** (the analytical model has no Unattributed term).
 25. ~~Idle power for dynamic energy~~ **Decided (2026-10-17): the nearest preceding idle window** in the same session.
 26. ~~Short window in substitution analysis~~ **Decided (2026-10-17): keep the one 1.991 s pass, flagged**; no matched set dropped.
-27. ~~RMSNorm implementation~~ **Decided (2026-10-17): add `rmsnorm_fused` (F.rms_norm, fused kernel where the build has one) next to the eager `rmsnorm`, and rerun the full grid in one new session.** The eager version cost 0.5-4.4% more model energy than fused LayerNorm in all 18 configs, an implementation effect (about 6x the bytes). The rerun becomes the main dataset; the first full run is kept as a repeatability check.
+27. ~~RMSNorm implementation~~ **Decided (2026-10-17): add `rmsnorm_fused` (F.rms_norm, fused kernel where the build has one) next to the eager `rmsnorm`, and rerun the full grid in one new session.** The eager version cost 0.5-4.4% more model energy than fused LayerNorm in all 18 configs, an implementation effect (about 6x the bytes). The rerun becomes the main dataset; the first full run is kept as a repeatability check. Done 2026-10-17: run 2 in `data/raw/`, run 1 in `data/raw/run-1/` (docs/methods.md sections 13 and 17).
 
 Implementation notes (how the code realizes the above; full detail in `docs/methods.md`): FLOPs and bytes are traced per ATen op on the meta device rather than hand-enumerated; the Section 3 layout is collapsed to one file each for components, substitutions, analytical, harness and report, plus `units.py` as the shared unit registry.
 

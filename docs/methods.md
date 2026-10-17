@@ -2,7 +2,7 @@
 
 This file records how the code in this repository produces every number used in the thesis, at the level of detail needed to write the Methodology chapter and to defend the Results and Discussion chapter. DESIGN.md is the specification; this file records what was implemented, the conventions it fixes, where it departs from the specification, and its known limitations. Section and file references point at the code that implements each statement.
 
-Status (2026-10-17): the full grid has been measured on the Kaggle T4 (Section 13), and the baseline analysis (shares, C4, decision rule, validation; tables T4 to T7, figures F5 and F7) is implemented and tested (Sections 14 and 15). Substitution analysis (T9, T10), capability (T8) and rank shifts are not done yet. Every number in Section 9 is analytical (computed, not measured).
+Status (2026-10-17): the full grid has been measured twice on the Kaggle T4, in two sessions on two different GPUs (Section 13). Run 2 is the main dataset (`data/raw/`), and run 1 (`data/raw/run-1/`) is kept as a repeatability check (Section 17). The baseline analysis (Sections 14 and 15) and substitution analysis (Section 16) are implemented and tested. Capability (T8), the quadrant and rank-shift figures (F8, F9) and the dashboard export are not done yet. Every number in Section 9 is analytical (computed, not measured).
 
 ## 1. Scope and provenance
 
@@ -245,7 +245,7 @@ Observations for the Results and Discussion chapter:
 7. **Measurement windows span R repetitions** (at least 2 s), because the NVML energy counter updates far more slowly than a single small kernel runs. Energy per repetition is an average over the window, not a per-kernel reading.
 8. **(Did not occur; see Section 13.) Expected OOM at the largest configurations.** The 6.9B block in FP32 at seq 2048 holds several float32 attention-score tensors of about 2 GB each and is expected to exceed 16 GB. If it does, that configuration has no block measurement. It is logged as `oom` and must be reported as a gap, not interpolated.
 9. **Absolute energy is not reproducible across sessions to better than about 16%.** Two smoke runs of the same configuration, with identical software, differed by 16% in total energy, with higher clocks in every unit of the second run (Section 12). The likely cause is a different physical T4 or different cooling; the first two runs did not record the device. Shares (C3, C4) were stable to within 0.011, so the thesis conclusions rest on shares, and each configuration is measured within one session (Section 6, step 10). Absolute joules are reported as session-specific.
-10. **Unattributed energy is negative in 8 of 18 configurations** (down to -6.7%; Section 15). The isolated components then sum to more than the model total. The most plausible causes are that isolated units read cold inputs from rotating buffers, while inside the block some inputs are still in L2, and that isolated units launch separate kernels for work the block fuses or overlaps. Since the C4 values sum to -Unattributed, a negative Unattributed raises the C4 values by |Unattributed| in total, but how that overcount splits across components is not observable. If it were split equally (|Unattributed| / 8 each, at most 0.0084), it would exceed embed_lookup's margin over the decision threshold in all 8 negative-Unattributed configurations (margins 5e-5 to 2.5e-4), while ln, rope and attn_core keep their margins. If it is split in proportion to each component's energy, which is the same as renormalizing C3 over the 8 components, all four tested components remain supported in 18 of 18 configurations (TA3; smallest margins: embed_lookup 5.2e-5, ln 2.2e-3, rope 3.8e-3, attn_core 6.2e-3). The embed_lookup verdict is therefore the least robust of the four and should be reported with this caveat.
+10. **Unattributed energy can be negative.** In run 2 it is negative in 3 of 18 configurations (down to -1.6%); in run 1 in 8 (down to -6.7%) (Section 17). The isolated components then sum to more than the model total. The most plausible causes are that isolated units read cold inputs from rotating buffers, while inside the block some inputs are still in L2, and that isolated units launch separate kernels for work the block fuses or overlaps. Since the C4 values sum to -Unattributed, a negative Unattributed raises the C4 values by |Unattributed| in total, but how that overcount splits across components is not observable. If it were split equally (|Unattributed| / 8 each), it would exceed embed_lookup's margin over the decision threshold in 2 run-2 configurations (6.9B/1024/FP32 and 6.9B/2048/FP32; 8 in run 1), while ln, rope and attn_core keep their margins. If it is split in proportion to each component's energy (TA3), all four tested components remain supported in 18 of 18 configurations in both runs. The embed_lookup verdict is therefore the least robust of the four and should be reported with this caveat.
 
 ## 11. Reproducing
 
@@ -324,9 +324,11 @@ The same configuration (Pythia 160M, seq 512, FP32), run on Kaggle with commit `
 
 Every sign was preserved, and the largest change was 0.0101 (out_proj). This is the basis for treating shares, not absolute joules, as the reportable quantity (Section 10, limitation 9).
 
-## 13. Full profiling run (2026-10-16)
+## 13. Full profiling runs
 
-The whole grid ran in one Kaggle session: run id `0cd31197`, one physical GPU (`gpu_uuid` ending `a4dce36505e2`), commit `52f319a` with no uncommitted changes, torch 2.11.0+cu128, CUDA 12.8, driver 580.178.04. Passes ran from 10:38:16 to 12:50:12 UTC (2 h 12 min, against a DESIGN estimate of 4 to 6 h). Raw files: `data/raw/passes.csv` (2,700 rows), `data/raw/idle.csv` (5 rows).
+### 13.1 Run 1 (2026-10-16, now `data/raw/run-1/`)
+
+The whole grid ran in one Kaggle session: run id `0cd31197`, one physical GPU (`gpu_uuid` ending `a4dce36505e2`), commit `52f319a` with no uncommitted changes, torch 2.11.0+cu128, CUDA 12.8, driver 580.178.04. Passes ran from 10:38:16 to 12:50:12 UTC (2 h 12 min, against a DESIGN estimate of 4 to 6 h). Raw files: `data/raw/run-1/passes.csv` (2,700 rows), `data/raw/run-1/idle.csv` (5 rows). Run 1 had 15 units (no rmsnorm_fused).
 
 **Coverage.** 18 configurations x 15 units x 10 passes = 2,700 rows, exactly 150 per configuration, with no duplicate (configuration, unit, pass) keys. No configuration was split across sessions.
 
@@ -335,6 +337,16 @@ The whole grid ran in one Kaggle session: run id `0cd31197`, one physical GPU (`
 **GPU state.** `throttle_reasons` was `sw_power_cap` in all 2,700 passes, and temperature stayed at 74 to 82 C. Windows lasted 2.00 to 4.91 s. The five idle windows (every 30 min) measured 34.2 to 36.3 W at 75 to 77 C.
 
 **Repeatability.** Across the 270 (configuration, unit) groups, IQR / median of energy per repetition has a median of 0.014. The largest values are 0.108 (mlp, 6.9B, 512, FP16), 0.104 (ln, 1.4B, 1024, FP16), 0.083 (ln, 6.9B, 1024, FP16) and 0.078 (block, 160M, 2048, FP32).
+
+### 13.2 Run 2, the main dataset (2026-10-16, `data/raw/`)
+
+Rerun after adding rmsnorm_fused (Section 16, decision 27). One Kaggle session: run id `4360bc50`, a different physical GPU from run 1 (`gpu_uuid` ending `59154059ef9e`), commit `33799b8` with no uncommitted changes, torch 2.11.0+cu128, CUDA 12.8, driver 580.178.04. Passes ran from 17:22:18 to 19:35:34 UTC (2 h 13 min).
+
+**Coverage.** 18 configurations x 16 units x 10 passes = 2,880 rows, exactly 160 per configuration, with no duplicates and no `oom`.
+
+**Status.** 2,877 `ok` and 3 `short_window`, all factorized_embed_in at 160M/512/FP16 (passes 3, 7 and 8, at 1.979, 1.9995 and 1.991 s). They are kept, flagged, under the same rule as decision 26.
+
+**GPU state.** `sw_power_cap` in all 2,880 passes, at 73 to 82 C.
 
 ## 14. Analysis method as implemented
 
@@ -349,34 +361,34 @@ Implemented in `src/anatomy/analysis.py`; run with `anatomy analyze`. Inputs: `d
 7. **Dynamic energy (appendix TA1, TA2).** Per pass, dynamic energy = energy_j - P_idle x time_s, where P_idle is the power of the nearest idle window at or before the pass in the same session (decided 2026-10-17). C3, C4 and the decision rule are recomputed on dynamic energy.
 8. **Normalized sensitivity (appendix TA3).** The decision rule recomputed with C4 = (C3 renormalized over the 8 components) - C2. This spreads any Unattributed energy over the components in proportion to their energy (limitation 10).
 
-## 15. Baseline results (full run)
+## 15. Baseline results (run 2)
 
-All values come from `data/derived/shares_summary.csv` and tables T4 to T7. They are measurements from one Kaggle T4 session (Section 13).
+All values come from run 2 (`data/derived/shares_summary.csv`, tables T4 to T7). Section 17 compares them with run 1.
 
-**Decision rule (T6).** All four tested components are memory-bound in all 18 configurations, and each has median C4 > 0 and median C4 > IQR(C4) in all 18. Verdict: supported for embed_lookup, layer normalization (pooled), rope and attn_core. On dynamic energy (TA2) the result is identical: 18 of 18 for each. With C3 renormalized over the 8 components (TA3, the proportional treatment of Unattributed), it is also 18 of 18 for each, but embed_lookup's margin is thin there (limitation 10). Switching to dynamic energy moved the tested components' median C4 by -0.0040 to +0.0081.
+**Decision rule (T6).** All four tested components are memory-bound in all 18 configurations, and each has median C4 > 0 and median C4 > IQR(C4) in all 18. Verdict: supported for embed_lookup, layer normalization (pooled), rope and attn_core. The result is identical on dynamic energy (TA2; switching moved the tested components' median C4 by -0.0014 to +0.0035) and with C3 renormalized over the 8 components (TA3; smallest margins over the IQR: embed_lookup 6.3e-5, ln 2.7e-3, rope 4.7e-3, attn_core 8.8e-3). The same verdicts hold in run 1 (Section 17).
 
 **Waste score C4 by component (median over passes; range over the 18 configurations):**
 
 | Component | Memory-bound | C4 range | Configs with C4 > 0 | Rank by C4 within config | Energy per FLOP (J) |
 |---|---|---|---|---|---|
-| attn_core | 18/18 | +0.0072 (6.9B/512/FP32) to +0.2949 (160M/2048/FP16) | 18 | 1 to 2 | 1.2e-11 to 5.1e-11 |
-| rope | 18/18 | +0.0040 to +0.0417 | 18 | 2 to 3 | 3.7e-09 to 6.6e-09 |
-| ln (pooled) | 18/18 | +0.0023 to +0.0234 | 18 | 3 to 4 | 2.7e-10 to 4.7e-10 |
-| loss | 18/18 | +0.0004 to +0.0421 | 18 | 2 to 6 | 5.1e-10 to 1.0e-09 |
-| embed_lookup | 18/18 | +0.0001 to +0.0020 | 18 | 5 to 7 | 1.1e-08 to 1.9e-08 |
-| out_proj | 0/18 | -0.1253 to +0.0078 | 7 | 4 to 7 | 4.4e-12 to 2.4e-11 |
-| mlp | 0/18 | -0.1771 to +0.0519 | 4 | 1 to 8 | 3.8e-12 to 3.0e-11 |
-| attn_proj | 0/18 | -0.0969 to -0.0131 | 0 | 6 to 8 | 3.7e-12 to 2.4e-11 |
+| attn_core | 18/18 | +0.0089 (6.9B/512/FP32) to +0.3068 (160M/2048/FP16) | 18 | 1 in all 18 | 1.1e-11 to 4.6e-11 |
+| rope | 18/18 | +0.0049 to +0.0466 | 18 | 2 to 3 | 3.6e-09 to 6.7e-09 |
+| ln (pooled) | 18/18 | +0.0028 to +0.0222 | 18 | 3 to 4 | 2.3e-10 to 4.7e-10 |
+| loss | 18/18 | +0.0005 to +0.0479 | 18 | 2 to 5 | 5.3e-10 to 1.1e-09 |
+| embed_lookup | 18/18 | +0.0001 to +0.0022 | 18 | 5 to 6 | 1.1e-08 to 2.0e-08 |
+| mlp | 0/18 | -0.1762 to +0.0124 | 2 | 2 to 8 | 3.5e-12 to 2.3e-11 |
+| out_proj | 0/18 | -0.1279 to -0.0000 | 0 | 6 to 7 | 3.9e-12 to 2.1e-11 |
+| attn_proj | 0/18 | -0.0966 to -0.0138 | 0 | 6 to 8 | 3.4e-12 to 2.2e-11 |
 
-The smallest C4 values in each tested component's range all occur at Pythia 6.9B: at 2048 FP32 for embed_lookup, ln, rope and loss, and at 512 FP32 for attn_core. The largest occur at 160M in FP16.
+For every tested component, the smallest C4 occurs at Pythia 6.9B in FP32 (2048 for embed_lookup, ln, rope and loss; 512 for attn_core) and the largest at 160M in FP16.
 
 Observations for the Results and Discussion chapter:
-- **attn_core carries the largest waste.** It ranks first by C4 in 15 of 18 configurations and second in the other 3. Its C4 grows with sequence length and is largest in FP16, reaching +0.295 at 160M/2048/FP16, where it takes 53% of measured energy against a 24% compute share (F5).
-- **Positive C4 is not exclusive to memory-bound components.** In the three 6.9B FP32 configurations, mlp, which is compute-bound, has the largest C4 (up to +0.052). out_proj is slightly positive in 7 configurations, at most +0.008. The decision rule tests only memory-bound components, so this does not affect the verdicts, but it means C4 > 0 also arises where a compute-bound unit runs below its ridge-implied efficiency at the power-capped clock.
-- **The C2 near 0 situation.** embed_lookup, rope, ln and loss have C2 between 1e-7 and 6e-4, so their C4 is almost entirely their C3. Energy per FLOP separates them from the matmul units by one to four orders of magnitude (for example ln 2.7e-10 to 4.7e-10 J/FLOP against mlp 3.8e-12 to 3.0e-11), which confirms that their positive C4 reflects energy spent per unit of work, not a division artifact.
-- **Unattributed** ranges from -6.7% (6.9B/512/FP16) to +4.3% (160M/1024/FP16), with a median of +0.2%. It is negative in 8 configurations: all six 6.9B configurations and 1.4B FP32 at 512 and 1024. It is positive in every FP16 configuration of 160M and 1.4B (+1.7% to +4.3%). See limitation 10.
+- **attn_core carries the largest waste.** It ranks first by C4 in all 18 configurations. Its C4 grows with sequence length and is largest in FP16, reaching +0.307 at 160M/2048/FP16, where it takes 54% of measured energy against a 24% compute share (F5).
+- **Compute-bound components have C4 at or below zero, with two small exceptions.** mlp is positive in 2 configurations (at most +0.012), out_proj in none, attn_proj in none. In run 1, mlp had the largest C4 in the three 6.9B FP32 configurations (up to +0.052). That did not reproduce in run 2 (Section 17), so it is not a finding.
+- **The C2 near 0 situation.** embed_lookup, rope, ln and loss have C2 between 1e-7 and 6e-4, so their C4 is almost entirely their C3. Energy per FLOP separates them from the matmul units by one to four orders of magnitude (for example ln 2.3e-10 to 4.7e-10 J/FLOP against mlp 3.5e-12 to 2.3e-11). Their positive C4 therefore reflects energy spent per unit of work, not a division artifact.
+- **Unattributed** ranges from -1.6% (6.9B/1024/FP32) to +4.1% (160M/1024/FP16), with a median of +1.4%. It is negative in 3 configurations (1.4B/1024/FP32, 6.9B/1024/FP32, 6.9B/2048/FP32). See limitation 10 and Section 17.
 
-**Validation (T4).** The analytical model ranks the 8 components almost exactly as measured. Spearman rho is 1.0 in 12 configurations, 0.976 in 5 (all FP16) and 0.952 at 6.9B/2048/FP16. The median absolute difference between analytical and measured component-normalized C3 is 0.008. The largest differences are for attn_core (median 0.042, at most 0.151 at 160M/1024/FP16) and mlp (median 0.055, at most 0.099). The analytical model gets the ordering right but not the size of attn_core's share, which is the quantity the measurement exists to provide.
+**Validation (T4).** The analytical model ranks the 8 components almost exactly as measured. Spearman rho is 1.0 in 12 configurations, 0.976 in 5 (all FP16) and 0.952 at 6.9B/2048/FP16, the same as in run 1. The median absolute difference between analytical and measured component-normalized C3 is 0.006. The largest differences are for attn_core (median 0.039, at most 0.148 at 160M/1024/FP16) and mlp (median 0.032, at most 0.094). The analytical model gets the ordering right but not the size of attn_core's share, which is the quantity the measurement exists to provide.
 
 ## 16. Substitution analysis method
 
@@ -390,3 +402,34 @@ Implemented in `src/anatomy/analysis.py` (`substitution_deltas`, `summarize_subs
 6. **T9** lists, per substitution, the priority component it replaces, that component's H1 verdict, its C4 range and C4 rank range (computed), and the mechanism and source (from `data/manual/substitutions.csv`, curated by hand). **T10's `published_value`** also comes from that file. It stays blank until a published figure is entered by hand, and no value is ever filled in by the code.
 
 **Why rmsnorm_fused was added (2026-10-17).** In the first full run, the eager rmsnorm cost more model energy than LayerNorm in all 18 configurations (delta -0.5% to -4.4%). The analytical model shows why: the eager version moves about 6 times the bytes of the fused LayerNorm kernel (for example 2.01 GB against 0.34 GB per call at 1.4B/2048/FP32), because each of its six operators makes a full round-trip to HBM. That compares an eager implementation with a fused one, not the RMSNorm algorithm with the LayerNorm algorithm. rmsnorm_fused computes the same function in one kernel (0.34 GB analytically), so the pair separates the algorithm from the implementation. Adding it required rerunning the full grid in one session, because a unit measured in a later session cannot be compared with a baseline from an earlier one (Section 12.2).
+
+### 16.1 Substitution results (run 2)
+
+From T10 (median over passes; positive = saving; "saves" counts configurations with median saving > 0 and > IQR):
+
+| Substitution | Replaces | delta % of model energy | Saves | Costs more |
+|---|---|---|---|---|
+| sdpa_core | attn_core | +0.67 (6.9B/512/FP32) to +40.36 (160M/2048/FP16) | 18/18 | 0 |
+| linear_core | attn_core | -2.39 (1.4B/512/FP16) to +43.92 (160M/2048/FP16) | 16/18 | 2 |
+| gqa_proj | attn_proj | +2.08 (160M/2048/FP16) to +13.72 (6.9B/1024/FP32) | 18/18 | 0 |
+| factorized_embed | embed_lookup + out_proj | +2.06 (6.9B/2048/FP32) to +21.26 (160M/512/FP32) | 18/18 | 0 |
+| rmsnorm (eager) | ln | -5.21 (160M/512/FP16) to -0.61 (6.9B/2048/FP32) | 0/18 | 18 |
+| rmsnorm_fused | ln | +0.00 (6.9B/1024/FP32) to +0.44 (160M/512/FP16) | 16/18 | 0 |
+
+**Algorithm vs implementation (RMSNorm).** Per instance, within run 2, the eager rmsnorm used 3.0 to 4.0 times the energy of LayerNorm (median 3.2), while rmsnorm_fused used 0.78 to 1.00 times (median 0.91). The fused kernel therefore ran on the T4 (the notebook's dispatch log is the direct evidence; see the note below). The RMSNorm algorithm saves up to 0.44% of model energy relative to LayerNorm. Writing it as six eager operators turns that into a 0.6 to 5.2% loss. For the thesis, the implementation of a normalization layer matters more for energy than the choice between LayerNorm and RMSNorm.
+
+**Attention substitutions** save the most at small models and long sequences in FP16, where attn_core's waste is largest (Section 15). sdpa_core saves energy everywhere. linear_core costs slightly more in 2 configurations (1.4B/512/FP16, -2.39%; 6.9B/512/FP16, -1.19%). rmsnorm_fused's saving exceeds its IQR everywhere except 6.9B/1024/FP32 and 6.9B/2048/FP32, where it is below 0.001%.
+
+Note: the provenance log from the run 2 notebook (which operators `F.rms_norm` dispatched to) is to be recorded here.
+
+## 17. Repeatability across runs (run 1 vs run 2)
+
+The two full runs ran on two different physical T4 GPUs (Section 13), with identical software apart from the rmsnorm_fused unit added for run 2. Baseline shares are compared over the 144 (configuration, component) pairs.
+
+- **Absolute energy is GPU-specific.** The ratio of pass-0 energy per repetition, run 2 over run 1, has a median of 0.914 and ranges from 0.555 to 1.063 across (configuration, unit). Absolute joules are not comparable across sessions (limitation 9).
+- **Verdicts are identical.** All four tested components are supported in 18 of 18 configurations in both runs, under total energy, dynamic energy and the normalized check.
+- **Tested components' C4 is stable.** The largest change in median C4 between runs is 0.0002 for embed_lookup, 0.0059 for ln, 0.0050 for rope, 0.0057 for loss and 0.0119 for attn_core. Over all 144 pairs, the median absolute change is 0.0015.
+- **Reported-only components near zero are not stable.** C4 changes sign in 9 pairs, all of them out_proj (7) or mlp (2), and in every one |C4| is below 0.008 in at least one of the two runs. The large swings are mlp at 6.9B/512: from +0.052 to -0.002 (FP32) and from +0.004 to -0.057 (FP16), the latter being the largest change in any pair (0.061). Statements about the sign of C4 for compute-bound components should not be made from one run.
+- **Ranks.** 111 of 144 component ranks are identical. attn_core is rank 1 in 15 configurations in run 1 and in all 18 in run 2.
+- **Unattributed** ranges from -6.7% to +4.3% (8 negative) in run 1 and from -1.6% to +4.1% (3 negative) in run 2.
+- **Validation** (Spearman rho) is identical in both runs: 1.0 in 12 configurations, 0.976 in 5 and 0.952 in 1.

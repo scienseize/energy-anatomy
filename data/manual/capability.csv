@@ -1,0 +1,9 @@
+component,capability_rank,evidence,citation,note
+embed_lookup,,,,
+ln,,,,
+attn_proj,,,,
+rope,,,,
+attn_core,,,,
+mlp,,,,
+out_proj,,,,
+loss,,,,

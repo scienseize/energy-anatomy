@@ -211,6 +211,9 @@ Sanity outputs written alongside: Σ C2 = 1, Σ C3 + Unattributed = 1, Σ C4 ove
 25. ~~Idle power for dynamic energy~~ **Decided (2026-10-17): the nearest preceding idle window** in the same session.
 26. ~~Short window in substitution analysis~~ **Decided (2026-10-17): keep the one 1.991 s pass, flagged**; no matched set dropped.
 27. ~~RMSNorm implementation~~ **Decided (2026-10-17): add `rmsnorm_fused` (F.rms_norm, fused kernel where the build has one) next to the eager `rmsnorm`, and rerun the full grid in one new session.** The eager version cost 0.5-4.4% more model energy than fused LayerNorm in all 18 configs, an implementation effect (about 6x the bytes). The rerun becomes the main dataset; the first full run is kept as a repeatability check. Done 2026-10-17: run 2 in `data/raw/`, run 1 in `data/raw/run-1/` (docs/methods.md sections 13 and 17).
+28. ~~C5 in "rank shifts across C5"~~ **Decided (2026-10-17, tentative: Bill's recollection of the original intent): C5 = precision.** F9 is then a heatmap of rank(C4, FP16) - rank(C4, FP32) per component (rows) and model x sequence length (columns).
+29. ~~capability_rank direction~~ **Decided (2026-10-17): 1 = most capable.**
+30. ~~F8 quadrant split~~ **Decided (2026-10-17): waste at C4 = 0, capability at its median rank; one median C4 per component pooled over the 18 configs.**
 
 Implementation notes (how the code realizes the above; full detail in `docs/methods.md`): FLOPs and bytes are traced per ATen op on the meta device rather than hand-enumerated; the Section 3 layout is collapsed to one file each for components, substitutions, analytical, harness and report, plus `units.py` as the shared unit registry.
 

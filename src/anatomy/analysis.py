@@ -296,6 +296,62 @@ def priority_table(summary: list[dict], rule: list[dict], manual: dict) -> list[
     return out
 
 
+CAPABILITY = DATA / "manual" / "capability.csv"
+MODERATORS = {  # C5 (decision 28): moderator -> (field, from value, to value, the fields held fixed)
+    "scale": ("model", "pythia-160m", "pythia-6.9b", ("seq_len", "precision")),
+    "sequence length": ("seq_len", 512, 2048, ("model", "precision")),
+    "precision": ("precision", "fp32", "fp16", ("model", "seq_len")),
+}
+
+
+def quadrant(c4: float, rank: int, median_rank: float) -> str:
+    """F8 split (decision 30): waste at C4 = 0, capability at the median rank (1 = most capable).
+    A component exactly at the median goes to the lower-capability half."""
+    waste = "high waste" if c4 > 0 else "low waste"
+    cap = "high capability" if rank < median_rank else "low capability"
+    return f"{waste}, {cap}"
+
+
+def capability_table(summary: list[dict], rule: list[dict], capability: list[dict]) -> list[dict]:
+    """T8: capability rank and evidence (data/manual/capability.csv) next to each component's waste,
+    pooled over configs as the median of the per-config median C4, and its F8 quadrant."""
+    verdict = {r["component"]: r["verdict"] for r in rule}
+    ranked = [int(r["capability_rank"]) for r in capability if r["capability_rank"]]
+    median_rank = float(np.median(ranked)) if ranked else None
+    out = []
+    for r in capability:
+        c4 = [x["c4_med"] for x in summary if x["component"] == r["component"]]
+        pooled = float(np.median(c4)) if c4 else None
+        rank = int(r["capability_rank"]) if r["capability_rank"] else None
+        out.append({"component": r["component"], "capability_rank": rank,
+                    "c4_pooled_med": pooled, "c4_min": min(c4) if c4 else None, "c4_max": max(c4) if c4 else None,
+                    "h1_verdict": verdict.get(r["component"], "reported only"),
+                    "quadrant": quadrant(pooled, rank, median_rank) if rank and pooled is not None else "",
+                    "evidence": r["evidence"], "citation": r["citation"], "note": r["note"]})
+    return sorted(out, key=lambda r: (r["capability_rank"] is None, r["capability_rank"] or 0))
+
+
+def rank_shifts(summary: list[dict]) -> list[dict]:
+    """F9 data: for each C5 moderator, the change in each component's C4 rank between two configs
+    that differ only in that moderator. shift = rank_from - rank_to, so positive = the component
+    climbs toward rank 1 (more waste) when the moderator changes."""
+    rank = {(r["model"], r["seq_len"], r["precision"], r["component"]): r["rank_c4"]
+            for r in summary if r["component"] in COMPONENTS}
+    out = []
+    for mod, (field, a, b, fixed) in MODERATORS.items():
+        others = dict.fromkeys(tuple(r[f] for f in fixed) for r in summary)  # summary is in grid order
+        for vals in others:
+            ctx = dict(zip(fixed, vals))
+            for c in COMPONENTS:
+                key = lambda v: tuple({**ctx, field: v}[k] for k in ("model", "seq_len", "precision")) + (c,)
+                if key(a) in rank and key(b) in rank:
+                    out.append({"moderator": mod, "from": a, "to": b,
+                                "held": " ".join(str(ctx[f]).removeprefix("pythia-") for f in fixed),
+                                "component": c, "rank_from": rank[key(a)], "rank_to": rank[key(b)],
+                                "shift": rank[key(a)] - rank[key(b)]})
+    return out
+
+
 def _write(path: Path, rows: list[dict]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", newline="") as f:
@@ -344,7 +400,12 @@ def run(passes_csv: Path = RAW / "passes.csv", idle_csv: Path = RAW / "idle.csv"
     t10 = summarize_substitutions(deltas, analytical, manual)
     t9 = priority_table(summary, t6, manual)
     _write(DERIVED / "substitutions.csv", deltas)
+    shifts = rank_shifts(summary)
+    _write(DERIVED / "rank_shifts.csv", shifts)
+    t8 = capability_table(summary, t6, _read(CAPABILITY)) if CAPABILITY.exists() else []
+    if t8:
+        write_table("T8", _fmt(t8))
     write_table("T9", _fmt(t9))
     write_table("T10", _fmt(t10))
     return {"summary": summary, "t4": t4, "t6": t6, "t6_dynamic": ta_rule, "t6_normalized": tn_rule,
-            "t9": t9, "t10": t10}
+            "t9": t9, "t10": t10, "t8": t8, "shifts": shifts}

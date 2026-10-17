@@ -99,3 +99,20 @@ def test_substitution_delta_by_hand():
     assert row["substitution"] == "rmsnorm" and row["e_total_base_j"] == pytest.approx(base)
     assert row["e_total_sub_j"] == pytest.approx(base + (2 * L + 1) * 0.25)
     assert row["delta_pct"] == pytest.approx(-(2 * L + 1) * 0.25 / base * 100)  # negative = costs more
+
+
+def test_quadrant_split():
+    """Decision 30: waste split at C4 = 0 (strict), capability at the median rank, median rank in the lower half."""
+    assert A.quadrant(0.01, 3, 4.0) == "high waste, high capability"
+    assert A.quadrant(0.01, 4, 4.0) == "high waste, low capability"  # median rank -> lower-capability half
+    assert A.quadrant(0.0, 1, 4.0) == "low waste, high capability"  # C4 = 0 is not waste
+    assert A.quadrant(-0.2, 7, 4.0) == "low waste, low capability"
+
+
+def test_rank_shift_sign():
+    """shift = rank_from - rank_to: a component moving from rank 5 to rank 2 climbs by +3 (more waste)."""
+    summary = [{"model": m, "seq_len": 512, "precision": "fp32", "component": c, "rank_c4": r}
+               for m, ranks in (("pythia-160m", {"ln": 5, "mlp": 2}), ("pythia-6.9b", {"ln": 2, "mlp": 5}))
+               for c, r in ranks.items()]
+    shifts = {s["component"]: s["shift"] for s in A.rank_shifts(summary) if s["moderator"] == "scale"}
+    assert shifts == {"ln": 3, "mlp": -3}

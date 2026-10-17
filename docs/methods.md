@@ -390,7 +390,7 @@ Rerun after adding rope_fused (decision 32). A first attempt stopped 49 s in, be
 
 **Short windows.** 24 passes came in under 2 s (1.512 to 1.999 s): rope_fused at 160M/512/FP16 (all 10 passes) and 160M/1024/FP16 (2), factorized_embed_in at 160M/512/FP16 (8 of 10), and ln at 6.9B FP16 (4). They are the fastest units, where the calibration probe overestimates time per repetition and so sets R slightly low. They are kept, flagged (decision 26). **Sensitivity:** dropping every short-window pass (and its matched set) leaves all four H1 verdicts at 18 of 18, moves no median C4 by more than 0.005 and no substitution delta by more than 0.16 percentage points, and loses only rope_fused at 160M/512/FP16.
 
-**rope_fused ran fused.** Per instance, rope_fused used 0.22 to 0.45 times the energy of the eager rope (median 0.26). The notebook's kernel-listing cell is the direct evidence of Inductor fusion; its output is to be recorded in Section 16.1.
+**rope_fused ran fused.** The notebook's kernel-listing cell shows Inductor compiled the rope into exactly two Triton kernels, one forward and one backward, in both precisions (Section 16.1; verbatim output in `data/raw/provenance/run3_rope_fused_kernels.txt`). Per instance, rope_fused used 0.22 to 0.45 times the energy of the eager rope (median 0.26).
 
 ## 14. Analysis method as implemented
 
@@ -478,6 +478,15 @@ From T10 (median over passes; positive = saving; "saves" counts configurations w
 (`ones_like` is the test's own gradient seed.) This also confirms the analytical treatment of rmsnorm_fused as one operator forward and one backward (Section 4.1).
 
 **rope (the priority component without a substitution before 2026-10-17).** Fusing rope (rope_fused) saves 0.29 to 3.10% of model energy, in all 18 configurations; per instance it uses 0.22 to 0.45 times the energy of the eager rope. Removing rope entirely (NoPE) would save 0.40 to 4.25%. The fused kernel therefore recovers 56 to 78% of the removal's saving (per configuration, median over matched passes) while keeping the positional encoding, so it carries no quality cost. NoPE's quality cost is not measured here: Haviv et al. (2022) report +0.55 (WikiText-103, 247M) and +0.05 (the Pile, 1.3B) validation perplexity against learned positions, for removing all positional encoding rather than Pythia's 25% partial rotary. Liger Kernel reports its fused RoPE about 8 times faster with about 3 times lower memory than HF's eager `apply_rotary_pos_emb` (A100, hidden 16384; baseline from the repository script), again a kernel speed result, not energy. As with RMSNorm, the eager implementation is the main source of rope's waste.
+
+**Provenance (run 3 notebook, Tesla T4).** CUDA kernels launched by one forward + backward of rope_fused, from the kernel-listing cell (excerpt; full output in `data/raw/provenance/run3_rope_fused_kernels.txt`):
+
+```
+2.11.0+cu128 torch.float32 2 triton kernels of 12: [... 'triton_poi_fused_add_cat_mul_neg_slice_0', 'triton_poi_fused_add_mul_neg_slice_slice_backward_0', ...]
+2.11.0+cu128 torch.float16 2 triton kernels of 12: [... 'triton_poi_fused_add_cat_mul_neg_slice_0', 'triton_poi_fused_add_mul_neg_slice_slice_backward_0', ...]
+```
+
+The rope itself is these two kernels: the forward one fuses the slicing, negation, multiply-add and concatenation, and the backward one fuses their gradients (including the slice-backward zero-padding). The remaining ten entries come from the check itself (`.sum()` reductions, an add, the gradient-seed fill, a copy) and CUDA runtime calls. This confirms the analytical treatment of rope_fused as one fused pass forward and one backward (Section 4.1).
 
 **Attention substitutions** save the most at small models and long sequences in FP16, where attn_core's waste is largest (Section 15). sdpa_core saves energy everywhere. linear_core costs slightly more in 2 configurations (1.4B/512/FP16 and 6.9B/512/FP16) and changes the model, so its quality cost would need separate evidence.
 

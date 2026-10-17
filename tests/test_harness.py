@@ -92,3 +92,21 @@ def test_refuses_to_append_under_a_different_header(tmp_path):
     with pytest.raises(ValueError, match="different column layout"):
         harness.profile(resume=True, dry_run=True, out_dir=tmp_path)
     assert (tmp_path / "passes.csv").read_text() == "run_id,ts,model\n"  # untouched
+
+
+def test_failing_unit_is_logged_and_run_continues(tmp_path, monkeypatch):
+    """A non-OOM failure (e.g. torch.compile unavailable on the GPU) is logged as error:<Type> per pass."""
+    monkeypatch.setattr(harness, "PROBE_S", 0.002)
+    real_build = harness.build
+
+    def build(unit, run, device):
+        if unit == "rope_fused":
+            raise RuntimeError("compile failed")
+        return real_build(unit, run, device)
+
+    monkeypatch.setattr(harness, "build", build)
+    harness.profile(resume=False, dry_run=True, out_dir=tmp_path)
+    rs = rows(tmp_path)
+    err = [r for r in rs if r["status"].startswith("error")]
+    assert {r["unit"] for r in err} == {"rope_fused"} and {r["status"] for r in err} == {"error:RuntimeError"}
+    assert any(r["unit"] == "block" for r in rs)

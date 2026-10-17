@@ -3,6 +3,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from anatomy.components import Rope
 from anatomy.config import ModelSpec
 
 LINEAR_CHUNK = 64  # linear_core chunk size (decided)
@@ -118,3 +119,20 @@ class RMSNormFused(nn.Module):
 
     def forward(self, x):
         return F.rms_norm(x, (x.shape[-1],), self.weight, self.eps)
+
+
+class RopeFused(nn.Module):
+    """The same rotary function as Rope, compiled by torch.compile (Inductor) so the slicing,
+    rotate_half, multiply-add and concatenation run as fused kernels instead of eager operators.
+    Compilation happens on the first call (inside the harness warm-up)."""
+
+    def __init__(self, m: ModelSpec, seq: int):
+        super().__init__()
+        self.rope = Rope(m, seq)
+        # Compiled code is cached per function, not per module: without a reset, every new config's
+        # shape/dtype/grad mode recompiles the same Rope.forward until the recompile limit fails the unit.
+        torch._dynamo.reset()
+        self._fn = torch.compile(self.rope, fullgraph=True, dynamic=False)
+
+    def forward(self, q, k):  # (b, h, s, hd)
+        return self._fn(q, k)

@@ -150,3 +150,12 @@ def test_rmsnorm_fused_matches_eager():
 
     x = torch.randn(2, 16, 64)
     torch.testing.assert_close(RMSNormFused(64, 1e-5)(x), RMSNorm(64, 1e-5)(x))
+
+
+def test_rope_fused_matches_eager():
+    from anatomy.components import Rope
+    from anatomy.substitutions import RopeFused
+
+    q, k = torch.randn(2, M160.heads, 64, M160.head_dim), torch.randn(2, M160.heads, 64, M160.head_dim)
+    for a, b in zip(RopeFused(M160, 64)(q, k), Rope(M160, 64)(q, k)):
+        torch.testing.assert_close(a, b)

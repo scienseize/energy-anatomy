@@ -17,7 +17,11 @@ SUBSTITUTIONS = {
     "factorized_embed_out": ("factorized_embed", "out_proj"),
     "rmsnorm": ("rmsnorm", "ln"),
     "rmsnorm_fused": ("rmsnorm_fused", "ln"),
+    "rope_fused": ("rope_fused", "rope"),
 }
+# Substitutions that remove a unit outright: nothing runs, so they are not measured. Their substituted
+# model energy is the baseline minus the removed unit's measured energy (substitute energy = 0).
+REMOVALS = {"nope": "rope"}  # NoPE: no positional encoding (Haviv et al., 2022; Kazemnejad et al., 2023)
 UNITS = (*COMPONENTS, *SUBSTITUTIONS, "block")
 
 
@@ -52,6 +56,7 @@ def _module(unit: str, m: ModelSpec, seq: int) -> nn.Module:
         "factorized_embed_out": lambda: S.FactorizedEmbedOut(m),
         "rmsnorm": lambda: S.RMSNorm(m.d, m.eps),
         "rmsnorm_fused": lambda: S.RMSNormFused(m.d, m.eps),
+        "rope_fused": lambda: S.RopeFused(m, seq),
     }[unit]()
 
 
@@ -69,7 +74,7 @@ def make_inputs(unit: str, run: RunSpec, device) -> tuple[torch.Tensor, ...]:
         return (ids(),)
     if unit in ("attn_proj", "gqa_proj"):
         return act(b, s, m.d), act(b, s, m.d)
-    if unit == "rope":
+    if unit in ("rope", "rope_fused"):
         return act(*heads), act(*heads)
     if unit in ("attn_core", "sdpa_core", "linear_core"):
         return act(*heads), act(*heads), act(*heads)

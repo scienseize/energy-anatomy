@@ -124,9 +124,26 @@ def _fused_rms(run: RunSpec) -> Count:
     return Count(ew_flops=(RMS_FWD + RMS_BWD) * e, bytes=fwd + bwd)
 
 
+ROPE_FUSED_FWD, ROPE_FUSED_BWD = 3, 3  # per rotated element: x*cos + rot(x)*sin; its transpose
+
+
+def _fused_rope(run: RunSpec) -> Count:
+    """rope_fused by formula (the meta device cannot see Inductor's fused kernels): one fused pass
+    forward and one backward per tensor (Q and K), each reading and writing the full (b, h, s, hd)
+    tensor once plus the cos/sin tables; FLOPs only on the rotated dims."""
+    m, p, n = run.model, run.dtype.itemsize, run.tokens
+    full = n * m.d  # elements of one of Q or K
+    rotated = n * m.heads * m.rotary_dims
+    tables = 2 * run.seq_len * m.rotary_dims  # cos and sin
+    per_tensor = (full + tables + full) * p  # read x (or its grad) + tables, write the result
+    return Count(ew_flops=2 * (ROPE_FUSED_FWD + ROPE_FUSED_BWD) * rotated, bytes=2 * 2 * per_tensor)
+
+
 def count(unit: str, run: RunSpec) -> Count:
     if unit == "rmsnorm_fused":
         return _fused_rms(run)
+    if unit == "rope_fused":
+        return _fused_rope(run)
     mod, inputs, grads = build(unit, run, "meta")
     with Counter() as ctr:
         step(mod, inputs, grads)

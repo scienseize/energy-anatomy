@@ -94,7 +94,7 @@ def test_substitution_delta_by_hand():
     analytical = [{"model": "m", "seq_len": "512", "precision": "fp32", "component": u, "count_per_model": str(n)}
                   for u, n in count.items()]
     idle = [{"run_id": "r", "ts": "t", "avg_power_w": "0"}]
-    (row,) = A.substitution_deltas(passes, idle, analytical, 1)
+    row = next(r for r in A.substitution_deltas(passes, idle, analytical, 1) if r["substitution"] == "rmsnorm")
     base = L * 10.0 + 1.0 + 0.5 + 2.0 + 1.0
     assert row["substitution"] == "rmsnorm" and row["e_total_base_j"] == pytest.approx(base)
     assert row["e_total_sub_j"] == pytest.approx(base + (2 * L + 1) * 0.25)
@@ -116,3 +116,21 @@ def test_rank_shift_sign():
                for c, r in ranks.items()]
     shifts = {s["component"]: s["shift"] for s in A.rank_shifts(summary) if s["moderator"] == "scale"}
     assert shifts == {"ln": 3, "mlp": -3}
+
+
+def test_removal_substitution_costs_nothing():
+    """NoPE removes rope: substituted total = baseline - rope energy x count, with no substitute energy."""
+    L = 2
+    energy = {"block": 10.0, "embed_lookup": 1.0, "ln": 0.5, "attn_proj": 2.0, "rope": 0.2, "attn_core": 3.0,
+              "mlp": 4.0, "out_proj": 2.0, "loss": 1.0}
+    count = {"ln": 2 * L + 1, "block": L, "embed_lookup": 1, "out_proj": 1, "loss": 1, "attn_proj": L, "rope": L,
+             "attn_core": L, "mlp": L}
+    passes = [{"run_id": "r", "ts": "t", "model": "m", "seq_len": "512", "precision": "fp32", "unit": u,
+               "pass_idx": "0", "status": "ok", "reps": "1", "time_s": "1", "energy_j": str(v)} for u, v in energy.items()]
+    analytical = [{"model": "m", "seq_len": "512", "precision": "fp32", "component": u, "count_per_model": str(n)}
+                  for u, n in count.items()]
+    rows = {r["substitution"]: r for r in A.substitution_deltas(passes, [{"run_id": "r", "ts": "t", "avg_power_w": "0"}],
+                                                                analytical, 1)}
+    base = L * 10.0 + 1.0 + 0.5 + 2.0 + 1.0
+    assert set(rows) == {"nope"}  # measured substitutions absent from this session are skipped
+    assert rows["nope"]["e_total_sub_j"] == pytest.approx(base - L * 0.2)

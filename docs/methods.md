@@ -69,6 +69,8 @@ Each substitution replaces exactly one baseline unit, keeps its call signature, 
 | factorized_embed (in) | embed_lookup | ALBERT style (Lan et al., 2020): `Embedding(V, E)` + `Linear(E, d)`, E = 128, no bias. |
 | factorized_embed (out) | out_proj | Mirrored: `Linear(d, E)` + `Linear(E, V)`, E = 128, no bias (like Pythia's embed_out). **This output-side factorization is the thesis's own extension.** ALBERT factorizes only the input embedding, so no published result covers the mirrored output layer (limitation 11). |
 | rmsnorm | ln (all 2L + 1) | Zhang and Sennrich (2019): `x * rsqrt(mean(x^2) + eps) * w`, eager ops in the run dtype (six separate operators, as in HF's Llama RMSNorm). |
+| rope_fused | rope | The same rotary function compiled by `torch.compile` (Inductor, `fullgraph=True`) into fused kernels (added 2026-10-17, because rope is a priority component with no substitution; Section 18). The Kaggle notebook lists the CUDA kernels one forward + backward launches, to show whether Inductor fused it on the T4. |
+| nope | rope | NoPE: the positional encoding removed (Haviv et al., 2022; Kazemnejad et al., 2023). Nothing runs in its place, so it is not profiled: the substituted model energy is the baseline minus rope's measured energy (Section 16). |
 | rmsnorm_fused | ln (all 2L + 1) | The same function through `F.rms_norm`, which dispatches to PyTorch's fused CUDA kernel where the build has one (added 2026-10-17; Section 16). The Kaggle notebook logs which operators actually ran. |
 
 The RQ5 metric is delta E_model = E_total(baseline) - E_total(with the substitution swapped in), as a percentage of baseline, per configuration.
@@ -83,6 +85,7 @@ FLOPs and bytes are not written out by hand per component. Each unit's real modu
 
 - View and aliasing operators (`is_view`, `_unsafe_view`) and pure allocations (`new_empty_strided`) move no data and are skipped.
 - An operator without a FLOP rule stops the run with an error, so no operator is ever silently counted as zero.
+- **Exception: rope_fused** is also counted by formula, because the meta device cannot see Inductor's fused kernels: one fused pass forward and one backward per tensor (Q and K), each reading and writing the full tensor once plus the cos/sin tables, with 3 FLOPs per rotated element forward and 3 backward. At 1.4B/2048/FP32 this gives 0.54 GB per call against 1.88 GB for the eager rope.
 - **Exception: rmsnorm_fused** is counted by formula, because on the meta device `F.rms_norm` decomposes into eager operators and tracing cannot see the fused CUDA kernel. It is counted like `native_layer_norm`: one operator forward (reads x and w, writes y and an fp32 rstd per row) and one backward (reads dy, x, w and rstd, writes dx and dw), with 4 FLOPs per element forward and 9 backward.
 
 ### 4.2 Bytes
@@ -162,7 +165,7 @@ Implemented in `src/anatomy/harness.py`; run with `anatomy profile [--resume]`. 
 5. **Calibration** (decided 2026-10-16). A timed probe runs n = 1, 2, 4, ... repetitions between two device synchronizations until the probe lasts at least 0.2 s. Then R = ceil(1.1 x 2 s / t_rep), with a 10% margin. R is fixed for all passes of that unit in that session.
 6. **Passes.** N = 10. Each pass is: Zeus `begin_window` (synchronizes the device, then reads the NVML energy counter), R x (forward on buffer i mod K, `backward(grad_output)`, then set every parameter and input `.grad` to None, so every repetition does identical work with no gradient accumulation), and `end_window` (synchronizes, reads the counter). The row stores energy_j, time_s, energy per repetition = energy_j / R, and average power = energy_j / time_s.
 7. **Context** (revised 2026-10-16, after the smoke test). A background thread samples NVML every 0.1 s during each window. The row stores the mean SM and memory clocks over the window, the maximum temperature, the enforced power limit, and `throttle_reasons`: the union (bitwise OR) of NVML's clocks-event reasons over all samples, written as names (`sw_power_cap`, `sw_thermal`, `hw_slowdown`, `hw_thermal`, `hw_power_brake`, `gpu_idle`, ...). Kaggle grants no root, so clocks cannot be locked. A pass is flagged `throttled` if its mean SM clock is below 90% of the GPU's maximum SM clock (NVML; 1,590 MHz on the T4). Throttled passes are flagged, never dropped. The original rule (compare with pass 0 of the same unit) was replaced because the smoke test showed pass 0 is already power-capped, so that rule flagged 5 of 150 passes while every unit after the first ran at 27 to 76% of the maximum SM clock.
-8. **Status.** `ok`; `short_window` if the measured window came in under 2 s despite calibration (kept, flagged for the analysis); `oom` if the unit ran out of GPU memory. An OOM writes one `oom` row per remaining pass, frees memory, and moves on. It is never silently dropped.
+8. **Status.** `ok`; `short_window` if the measured window came in under 2 s despite calibration (kept, flagged for the analysis); `oom` if the unit ran out of GPU memory; `error:<ExceptionType>` if the unit failed for any other reason (for example torch.compile unavailable on the GPU; added 2026-10-17). Both write one row per remaining pass, free memory, and move on, so one failing unit cannot stop an unattended 12 h run. They are never silently dropped.
 9. **Idle baseline** (decided 2026-10-16). After pre-conditioning, a 10 s idle window (device synchronized, then sleep inside a Zeus window) at the start of each session and whenever 30 minutes have passed since the last one, checked before every pass. Idle windows go to `data/raw/idle.csv`. Shares use total energy. The idle power x window time correction (dynamic energy) is an appendix sensitivity check only.
 10. **Persistence and resume.** Every pass is appended to `passes.csv` and the file is closed immediately, so a killed session loses at most the pass in progress. With `--resume`, any (configuration, unit, pass index) already present, of any status, is skipped. A configuration is never split across sessions (decided 2026-10-16, after the second smoke test showed absolute energy shifting 16% between sessions; Section 12). If an earlier session left a configuration incomplete, the resumed session measures all of that configuration's units again from pass 0. The earlier partial rows stay in the append-only file but are not used: the analysis takes, per configuration, the one run id that covers every unit and pass. Without `--resume`, all passes are appended again under a new run id, for deliberate reruns. Before appending, the harness checks that an existing `passes.csv` or `idle.csv` has exactly the current column layout and stops with an error otherwise, so rows are never written under a stale header (for example, the earlier smoke-test schema).
 11. **Device identity.** Kaggle provides two T4s. The harness sets `CUDA_DEVICE_ORDER=PCI_BUS_ID` before CUDA initializes and asserts that NVML device 0 and CUDA device 0 have the same PCI bus id. That way the energy counter, the clock readings and the workload all refer to the same physical GPU.
@@ -182,7 +185,7 @@ The first session runs a smoke test (`SMOKE = True`): one 160M configuration int
 ## 7. Data schemas
 
 `data/raw/passes.csv` (append-only, one row per pass):
-`run_id, ts, model, seq_len, precision, tokens, unit, unit_kind{component|substitution|block}, pass_idx, reps, energy_j, time_s, energy_per_rep_j, avg_power_w, sm_clock_mhz, mem_clock_mhz, temp_c, power_limit_w, throttled, throttle_reasons, status{ok|short_window|oom}, torch, cuda, driver, gpu_uuid, git_sha`
+`run_id, ts, model, seq_len, precision, tokens, unit, unit_kind{component|substitution|block}, pass_idx, reps, energy_j, time_s, energy_per_rep_j, avg_power_w, sm_clock_mhz, mem_clock_mhz, temp_c, power_limit_w, throttled, throttle_reasons, status{ok|short_window|oom|error:<type>}, torch, cuda, driver, gpu_uuid, git_sha`
 
 `sm_clock_mhz` and `mem_clock_mhz` are window means, and `temp_c` is the window maximum (Section 6, step 7). `throttle_reasons` was added on 2026-10-16 after the first smoke test. `gpu_uuid` (NVML's identifier of the physical GPU) was added on 2026-10-16 after the second smoke test, so rows can be grouped by device. `power_limit_w` was added to the DESIGN section 9 schema on 2026-10-16, because DESIGN section 6 requires recording the power limit. Substitution unit names in this file are `sdpa_core, linear_core, gqa_proj, factorized_embed_in, factorized_embed_out, rmsnorm`.
 
@@ -194,7 +197,7 @@ The first session runs a smoke test (`SMOKE = True`): one 160M configuration int
 
 ## 8. Verification
 
-`uv run pytest` (50 tests):
+`uv run pytest` (54 tests):
 
 | Test | What it establishes |
 |---|---|
@@ -224,6 +227,9 @@ The first session runs a smoke test (`SMOKE = True`): one 160M configuration int
 | test_quadrant_split | F8 quadrant boundaries: C4 = 0 is not waste; the median capability rank falls in the lower-capability half. |
 | test_rank_shift_sign | A component moving from rank 5 to 2 has shift +3 (climbs toward more waste). |
 | test_value_parsing, test_export_copies_derived_values_without_computing | The JSON export is valid (no NaN), covers 18 configurations, and copies values from `shares_summary.csv` unchanged. |
+| test_rope_fused_matches_eager | The compiled rope computes the same function as the eager rope. |
+| test_removal_substitution_costs_nothing | NoPE's substituted total is the baseline minus rope's energy; unmeasured substitutions are skipped. |
+| test_failing_unit_is_logged_and_run_continues | A non-OOM failure is logged as `error:<Type>` for each pass, and later units still run. |
 | test_refuses_to_append_under_a_different_header | An output file with a different column layout stops the run and is left untouched. |
 
 Verified on the T4 by the smoke test (Section 12): the Zeus energy counter, the NVML/CUDA device pinning, the memory-efficient attention kernel, and the full harness on one configuration. Not yet verified on the T4: the in-window NVML sampling and the pre-conditioning added after the smoke test (next Kaggle session), and the GPU-specific operator decomposition.
@@ -276,7 +282,7 @@ Observations for the Results and Discussion chapter:
 
 ```
 uv sync                        # Python 3.11 env from uv.lock
-uv run pytest                  # 50 tests
+uv run pytest                  # 54 tests
 uv run anatomy analyze         # shares, C4, rule, substitutions, capability: T4-T10, TA1-TA3, F5, F7-F10
 uv run anatomy export          # data/export/*.json for the dashboard
 uv run anatomy analytical      # data/derived/analytical.csv
@@ -423,9 +429,10 @@ Implemented in `src/anatomy/analysis.py` (`substitution_deltas`, `summarize_subs
 1. **Same session.** Substitution units are taken from the same session as the baseline of that configuration (Section 14, step 1). A substitution not measured in that session is skipped, not borrowed from another session, because absolute energy shifts between sessions (Section 12.2).
 2. **Swapped model total, per matched pass** (DESIGN section 5). E_total,sub = E_total,base - sum over replaced units of (E_replaced x count) + sum over substitute units of (E_sub x count), where E_total,base is the baseline total of Section 14 for the same pass j. factorized_embed swaps its in and out units together (embed_lookup and out_proj). The rmsnorm variants replace all 2L + 1 norms.
 3. **Saving.** delta % = (E_total,base - E_total,sub) / E_total,base x 100. Positive means the substitution saves energy. The table reports the median and IQR (linear) over passes, the replaced units' share of the baseline total, the substitute's share of the substituted total, and whether the substitute is memory-bound (analytical).
-4. **Additivity assumption.** The substituted total is computed by swapping isolated-unit energies, not by measuring a full block with the substitution inside. Unattributed energy is therefore assumed unchanged by the substitution.
-5. **Short window** (decided 2026-10-17). The one `short_window` pass (factorized_embed_out, 1.4B/2048/FP16, pass 3, 1.991 s) is kept, flagged. Its matched set is not dropped.
-6. **T9** lists, per substitution, the priority component it replaces, that component's H1 verdict, its C4 range and C4 rank range (computed), and the mechanism and source (from `data/manual/substitutions.csv`, curated by hand). **T10's `published_value`** also comes from that file. It stays blank until a published figure is entered by hand, and no value is ever filled in by the code.
+4. **Removals.** NoPE removes rope outright, so nothing is measured in its place: E_total,sub = E_total,base - E_rope x L for the same pass. Its quality cost is not measured here and comes from Haviv et al. (2022, Table 1): validation perplexity +0.55 (WikiText-103, 247M) and +0.05 (the Pile, 1.3B) against learned positions, for removing all positional encoding rather than Pythia's 25% partial rotary.
+5. **Additivity assumption.** The substituted total is computed by swapping isolated-unit energies, not by measuring a full block with the substitution inside. Unattributed energy is therefore assumed unchanged by the substitution.
+6. **Short window** (decided 2026-10-17). The one `short_window` pass (factorized_embed_out, 1.4B/2048/FP16, pass 3, 1.991 s) is kept, flagged. Its matched set is not dropped.
+7. **T9** lists, per substitution, the priority component it replaces, that component's H1 verdict, its C4 range and C4 rank range (computed), and the mechanism and source (from `data/manual/substitutions.csv`, curated by hand). **T10's `published_value`** also comes from that file. It stays blank until a published figure is entered by hand, and no value is ever filled in by the code.
 
 **Why rmsnorm_fused was added (2026-10-17).** In the first full run, the eager rmsnorm cost more model energy than LayerNorm in all 18 configurations (delta -0.5% to -4.4%). The analytical model shows why: the eager version moves about 6 times the bytes of the fused LayerNorm kernel (for example 2.01 GB against 0.34 GB per call at 1.4B/2048/FP32), because each of its six operators makes a full round-trip to HBM. That compares an eager implementation with a fused one, not the RMSNorm algorithm with the LayerNorm algorithm. rmsnorm_fused computes the same function in one kernel (0.34 GB analytically), so the pair separates the algorithm from the implementation. Adding it required rerunning the full grid in one session, because a unit measured in a later session cannot be compared with a baseline from an earlier one (Section 12.2).
 

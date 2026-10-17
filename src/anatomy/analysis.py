@@ -15,14 +15,14 @@ import numpy as np
 
 from anatomy.config import DATA
 from anatomy.report import write_table
-from anatomy.units import COMPONENTS, SUBSTITUTIONS
+from anatomy.units import COMPONENTS, REMOVALS, SUBSTITUTIONS
 
 RAW, DERIVED = DATA / "raw", DATA / "derived"
 TESTED = ("embed_lookup", "ln", "rope", "attn_core")  # H1 components; ln is pooled with the final norm
 USABLE = ("ok", "short_window")  # short windows are kept (flagged); oom rows carry no energy
 MODEL_ORDER = ("pythia-160m", "pythia-1.4b", "pythia-6.9b")
 COMP_ORDER = (*COMPONENTS, "unattributed")
-SUB_ORDER = tuple(dict.fromkeys(sub for sub, _ in SUBSTITUTIONS.values()))
+SUB_ORDER = (*dict.fromkeys(sub for sub, _ in SUBSTITUTIONS.values()), *REMOVALS)
 MANUAL = DATA / "manual" / "substitutions.csv"
 
 
@@ -231,6 +231,8 @@ def substitution_deltas(passes: list[dict], idle: list[dict], analytical: list[d
     groups = defaultdict(list)
     for unit, (sub, replaced) in SUBSTITUTIONS.items():
         groups[sub].append((unit, replaced))
+    for sub, replaced in REMOVALS.items():
+        groups[sub].append((None, replaced))  # removal: nothing runs in its place
     out = []
     for cfg in dict.fromkeys(c for c, _ in e):
         layers = int(an[(*cfg, "block")]["count_per_model"])
@@ -240,10 +242,10 @@ def substitution_deltas(passes: list[dict], idle: list[dict], analytical: list[d
                 continue
             base = _model_total(e, cfg, j, 0, layers)
             for sub, members in groups.items():
-                if any(j not in e.get((cfg, u), {}) for u, _ in members):
+                if any(u is not None and j not in e.get((cfg, u), {}) for u, _ in members):
                     continue  # substitution not measured in this session (e.g. added later)
                 removed = sum(e[(cfg, rep)][j][0] * count(rep) for _, rep in members)
-                added = sum(e[(cfg, u)][j][0] * count(u) for u, _ in members)
+                added = sum(e[(cfg, u)][j][0] * count(u) for u, _ in members if u is not None)
                 total = base - removed + added
                 out.append({"model": cfg[0], "seq_len": cfg[1], "precision": cfg[2], "substitution": sub,
                             "replaces": "+".join(rep for _, rep in members), "pass_idx": j,
@@ -262,7 +264,7 @@ def summarize_substitutions(deltas: list[dict], analytical: list[dict], manual: 
         g[(r["model"], r["seq_len"], r["precision"], r["substitution"], r["replaces"])].append(r)
     out = []
     for (m, s, p, sub, rep), rs in g.items():
-        units = [u for u, (x, _) in SUBSTITUTIONS.items() if x == sub]
+        units = [u for u, (x, _) in SUBSTITUTIONS.items() if x == sub]  # empty for a removal
         d = [r["delta_pct"] for r in rs]
         out.append({"model": m, "seq_len": s, "precision": p, "substitution": sub, "replaces": rep,
                     "n_passes": len(rs),
@@ -282,7 +284,7 @@ def priority_table(summary: list[dict], rule: list[dict], manual: dict) -> list[
     verdict = {r["component"]: r["verdict"] for r in rule}
     out = []
     for sub in SUB_ORDER:  # listed even before measurement: T9 is the plan, T10 the outcome
-        replaced = list(dict.fromkeys(rep for x, rep in SUBSTITUTIONS.values() if x == sub))
+        replaced = list(dict.fromkeys(rep for x, rep in SUBSTITUTIONS.values() if x == sub)) or [REMOVALS[sub]]
         def rng(c, key, f):
             v = [r[key] for r in summary if r["component"] == c]
             return f"{f(min(v))} to {f(max(v))}"

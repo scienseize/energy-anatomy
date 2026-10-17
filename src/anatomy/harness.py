@@ -254,11 +254,14 @@ class Profiler:
                     "energy_per_rep_j": e / reps, "avg_power_w": e / t, **ctx, "throttled": throttled,
                     "status": "ok" if t >= self.p["min_window_s"] else "short_window"})
                 self.done.setdefault(k, set()).add(j)
-        except torch.OutOfMemoryError:
+        except Exception as e:  # noqa: BLE001 - an unattended 12 h run must survive one failing unit
             # Logged, never silently dropped; resume treats these passes as done.
+            status = "oom" if isinstance(e, torch.OutOfMemoryError) else f"error:{type(e).__name__}"
+            if not status == "oom":
+                print(f"unit {unit} {k[:3]} failed: {type(e).__name__}: {e}", flush=True)
             for j in todo:
                 if j not in self.done.get(k, set()):
-                    _append(self.passes_csv, FIELDS, {**base, "ts": _now(), "pass_idx": j, "status": "oom"})
+                    _append(self.passes_csv, FIELDS, {**base, "ts": _now(), "pass_idx": j, "status": status})
                     self.done.setdefault(k, set()).add(j)
         finally:
             del mod, sets

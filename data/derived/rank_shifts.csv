@@ -1,52 +1,52 @@
 moderator,from,to,held,component,rank_from,rank_to,shift
-scale,pythia-160m,pythia-6.9b,512 fp32,embed_lookup,5,5,0
-scale,pythia-160m,pythia-6.9b,512 fp32,ln,4,3,1
+scale,pythia-160m,pythia-6.9b,512 fp32,embed_lookup,5,6,-1
+scale,pythia-160m,pythia-6.9b,512 fp32,ln,4,4,0
 scale,pythia-160m,pythia-6.9b,512 fp32,attn_proj,7,8,-1
-scale,pythia-160m,pythia-6.9b,512 fp32,rope,3,2,1
-scale,pythia-160m,pythia-6.9b,512 fp32,attn_core,1,1,0
-scale,pythia-160m,pythia-6.9b,512 fp32,mlp,8,6,2
+scale,pythia-160m,pythia-6.9b,512 fp32,rope,3,3,0
+scale,pythia-160m,pythia-6.9b,512 fp32,attn_core,1,2,-1
+scale,pythia-160m,pythia-6.9b,512 fp32,mlp,8,1,7
 scale,pythia-160m,pythia-6.9b,512 fp32,out_proj,6,7,-1
-scale,pythia-160m,pythia-6.9b,512 fp32,loss,2,4,-2
-scale,pythia-160m,pythia-6.9b,512 fp16,embed_lookup,5,5,0
+scale,pythia-160m,pythia-6.9b,512 fp32,loss,2,5,-3
+scale,pythia-160m,pythia-6.9b,512 fp16,embed_lookup,5,6,-1
 scale,pythia-160m,pythia-6.9b,512 fp16,ln,4,3,1
 scale,pythia-160m,pythia-6.9b,512 fp16,attn_proj,6,7,-1
 scale,pythia-160m,pythia-6.9b,512 fp16,rope,3,2,1
 scale,pythia-160m,pythia-6.9b,512 fp16,attn_core,1,1,0
 scale,pythia-160m,pythia-6.9b,512 fp16,mlp,8,8,0
-scale,pythia-160m,pythia-6.9b,512 fp16,out_proj,7,6,1
-scale,pythia-160m,pythia-6.9b,512 fp16,loss,2,4,-2
+scale,pythia-160m,pythia-6.9b,512 fp16,out_proj,7,4,3
+scale,pythia-160m,pythia-6.9b,512 fp16,loss,2,5,-3
 scale,pythia-160m,pythia-6.9b,1024 fp32,embed_lookup,5,6,-1
 scale,pythia-160m,pythia-6.9b,1024 fp32,ln,4,4,0
-scale,pythia-160m,pythia-6.9b,1024 fp32,attn_proj,6,8,-2
+scale,pythia-160m,pythia-6.9b,1024 fp32,attn_proj,7,8,-1
 scale,pythia-160m,pythia-6.9b,1024 fp32,rope,3,3,0
-scale,pythia-160m,pythia-6.9b,1024 fp32,attn_core,1,1,0
-scale,pythia-160m,pythia-6.9b,1024 fp32,mlp,8,2,6
-scale,pythia-160m,pythia-6.9b,1024 fp32,out_proj,7,7,0
+scale,pythia-160m,pythia-6.9b,1024 fp32,attn_core,1,2,-1
+scale,pythia-160m,pythia-6.9b,1024 fp32,mlp,8,1,7
+scale,pythia-160m,pythia-6.9b,1024 fp32,out_proj,6,7,-1
 scale,pythia-160m,pythia-6.9b,1024 fp32,loss,2,5,-3
-scale,pythia-160m,pythia-6.9b,1024 fp16,embed_lookup,5,5,0
+scale,pythia-160m,pythia-6.9b,1024 fp16,embed_lookup,5,6,-1
 scale,pythia-160m,pythia-6.9b,1024 fp16,ln,4,3,1
 scale,pythia-160m,pythia-6.9b,1024 fp16,attn_proj,6,7,-1
 scale,pythia-160m,pythia-6.9b,1024 fp16,rope,3,2,1
 scale,pythia-160m,pythia-6.9b,1024 fp16,attn_core,1,1,0
 scale,pythia-160m,pythia-6.9b,1024 fp16,mlp,8,8,0
-scale,pythia-160m,pythia-6.9b,1024 fp16,out_proj,7,6,1
-scale,pythia-160m,pythia-6.9b,1024 fp16,loss,2,4,-2
+scale,pythia-160m,pythia-6.9b,1024 fp16,out_proj,7,4,3
+scale,pythia-160m,pythia-6.9b,1024 fp16,loss,2,5,-3
 scale,pythia-160m,pythia-6.9b,2048 fp32,embed_lookup,5,6,-1
 scale,pythia-160m,pythia-6.9b,2048 fp32,ln,4,4,0
 scale,pythia-160m,pythia-6.9b,2048 fp32,attn_proj,6,8,-2
-scale,pythia-160m,pythia-6.9b,2048 fp32,rope,3,2,1
-scale,pythia-160m,pythia-6.9b,2048 fp32,attn_core,1,1,0
-scale,pythia-160m,pythia-6.9b,2048 fp32,mlp,8,3,5
+scale,pythia-160m,pythia-6.9b,2048 fp32,rope,3,3,0
+scale,pythia-160m,pythia-6.9b,2048 fp32,attn_core,1,2,-1
+scale,pythia-160m,pythia-6.9b,2048 fp32,mlp,8,1,7
 scale,pythia-160m,pythia-6.9b,2048 fp32,out_proj,7,7,0
 scale,pythia-160m,pythia-6.9b,2048 fp32,loss,2,5,-3
-scale,pythia-160m,pythia-6.9b,2048 fp16,embed_lookup,5,5,0
+scale,pythia-160m,pythia-6.9b,2048 fp16,embed_lookup,5,6,-1
 scale,pythia-160m,pythia-6.9b,2048 fp16,ln,4,3,1
 scale,pythia-160m,pythia-6.9b,2048 fp16,attn_proj,6,7,-1
 scale,pythia-160m,pythia-6.9b,2048 fp16,rope,3,2,1
 scale,pythia-160m,pythia-6.9b,2048 fp16,attn_core,1,1,0
 scale,pythia-160m,pythia-6.9b,2048 fp16,mlp,8,8,0
-scale,pythia-160m,pythia-6.9b,2048 fp16,out_proj,7,6,1
-scale,pythia-160m,pythia-6.9b,2048 fp16,loss,2,4,-2
+scale,pythia-160m,pythia-6.9b,2048 fp16,out_proj,7,4,3
+scale,pythia-160m,pythia-6.9b,2048 fp16,loss,2,5,-3
 sequence length,512,2048,160m fp32,embed_lookup,5,5,0
 sequence length,512,2048,160m fp32,ln,4,4,0
 sequence length,512,2048,160m fp32,attn_proj,7,6,1
@@ -63,38 +63,38 @@ sequence length,512,2048,160m fp16,attn_core,1,1,0
 sequence length,512,2048,160m fp16,mlp,8,8,0
 sequence length,512,2048,160m fp16,out_proj,7,7,0
 sequence length,512,2048,160m fp16,loss,2,2,0
-sequence length,512,2048,1.4b fp32,embed_lookup,5,5,0
+sequence length,512,2048,1.4b fp32,embed_lookup,6,5,1
 sequence length,512,2048,1.4b fp32,ln,3,3,0
 sequence length,512,2048,1.4b fp32,attn_proj,7,7,0
 sequence length,512,2048,1.4b fp32,rope,2,2,0
 sequence length,512,2048,1.4b fp32,attn_core,1,1,0
 sequence length,512,2048,1.4b fp32,mlp,8,8,0
-sequence length,512,2048,1.4b fp32,out_proj,6,6,0
-sequence length,512,2048,1.4b fp32,loss,4,4,0
-sequence length,512,2048,1.4b fp16,embed_lookup,5,5,0
+sequence length,512,2048,1.4b fp32,out_proj,4,6,-2
+sequence length,512,2048,1.4b fp32,loss,5,4,1
+sequence length,512,2048,1.4b fp16,embed_lookup,6,5,1
 sequence length,512,2048,1.4b fp16,ln,3,3,0
 sequence length,512,2048,1.4b fp16,attn_proj,7,7,0
 sequence length,512,2048,1.4b fp16,rope,2,2,0
 sequence length,512,2048,1.4b fp16,attn_core,1,1,0
 sequence length,512,2048,1.4b fp16,mlp,8,8,0
-sequence length,512,2048,1.4b fp16,out_proj,6,6,0
-sequence length,512,2048,1.4b fp16,loss,4,4,0
-sequence length,512,2048,6.9b fp32,embed_lookup,5,6,-1
-sequence length,512,2048,6.9b fp32,ln,3,4,-1
+sequence length,512,2048,1.4b fp16,out_proj,4,6,-2
+sequence length,512,2048,1.4b fp16,loss,5,4,1
+sequence length,512,2048,6.9b fp32,embed_lookup,6,6,0
+sequence length,512,2048,6.9b fp32,ln,4,4,0
 sequence length,512,2048,6.9b fp32,attn_proj,8,8,0
-sequence length,512,2048,6.9b fp32,rope,2,2,0
-sequence length,512,2048,6.9b fp32,attn_core,1,1,0
-sequence length,512,2048,6.9b fp32,mlp,6,3,3
+sequence length,512,2048,6.9b fp32,rope,3,3,0
+sequence length,512,2048,6.9b fp32,attn_core,2,2,0
+sequence length,512,2048,6.9b fp32,mlp,1,1,0
 sequence length,512,2048,6.9b fp32,out_proj,7,7,0
-sequence length,512,2048,6.9b fp32,loss,4,5,-1
-sequence length,512,2048,6.9b fp16,embed_lookup,5,5,0
+sequence length,512,2048,6.9b fp32,loss,5,5,0
+sequence length,512,2048,6.9b fp16,embed_lookup,6,6,0
 sequence length,512,2048,6.9b fp16,ln,3,3,0
 sequence length,512,2048,6.9b fp16,attn_proj,7,7,0
 sequence length,512,2048,6.9b fp16,rope,2,2,0
 sequence length,512,2048,6.9b fp16,attn_core,1,1,0
 sequence length,512,2048,6.9b fp16,mlp,8,8,0
-sequence length,512,2048,6.9b fp16,out_proj,6,6,0
-sequence length,512,2048,6.9b fp16,loss,4,4,0
+sequence length,512,2048,6.9b fp16,out_proj,4,4,0
+sequence length,512,2048,6.9b fp16,loss,5,5,0
 precision,fp32,fp16,160m 512,embed_lookup,5,5,0
 precision,fp32,fp16,160m 512,ln,4,4,0
 precision,fp32,fp16,160m 512,attn_proj,7,6,1
@@ -105,11 +105,11 @@ precision,fp32,fp16,160m 512,out_proj,6,7,-1
 precision,fp32,fp16,160m 512,loss,2,2,0
 precision,fp32,fp16,160m 1024,embed_lookup,5,5,0
 precision,fp32,fp16,160m 1024,ln,4,4,0
-precision,fp32,fp16,160m 1024,attn_proj,6,6,0
+precision,fp32,fp16,160m 1024,attn_proj,7,6,1
 precision,fp32,fp16,160m 1024,rope,3,3,0
 precision,fp32,fp16,160m 1024,attn_core,1,1,0
 precision,fp32,fp16,160m 1024,mlp,8,8,0
-precision,fp32,fp16,160m 1024,out_proj,7,7,0
+precision,fp32,fp16,160m 1024,out_proj,6,7,-1
 precision,fp32,fp16,160m 1024,loss,2,2,0
 precision,fp32,fp16,160m 2048,embed_lookup,5,5,0
 precision,fp32,fp16,160m 2048,ln,4,4,0
@@ -119,21 +119,21 @@ precision,fp32,fp16,160m 2048,attn_core,1,1,0
 precision,fp32,fp16,160m 2048,mlp,8,8,0
 precision,fp32,fp16,160m 2048,out_proj,7,7,0
 precision,fp32,fp16,160m 2048,loss,2,2,0
-precision,fp32,fp16,1.4b 512,embed_lookup,5,5,0
+precision,fp32,fp16,1.4b 512,embed_lookup,6,6,0
 precision,fp32,fp16,1.4b 512,ln,3,3,0
 precision,fp32,fp16,1.4b 512,attn_proj,7,7,0
 precision,fp32,fp16,1.4b 512,rope,2,2,0
 precision,fp32,fp16,1.4b 512,attn_core,1,1,0
 precision,fp32,fp16,1.4b 512,mlp,8,8,0
-precision,fp32,fp16,1.4b 512,out_proj,6,6,0
-precision,fp32,fp16,1.4b 512,loss,4,4,0
-precision,fp32,fp16,1.4b 1024,embed_lookup,5,5,0
+precision,fp32,fp16,1.4b 512,out_proj,4,4,0
+precision,fp32,fp16,1.4b 512,loss,5,5,0
+precision,fp32,fp16,1.4b 1024,embed_lookup,6,6,0
 precision,fp32,fp16,1.4b 1024,ln,3,3,0
 precision,fp32,fp16,1.4b 1024,attn_proj,7,7,0
 precision,fp32,fp16,1.4b 1024,rope,2,2,0
 precision,fp32,fp16,1.4b 1024,attn_core,1,1,0
 precision,fp32,fp16,1.4b 1024,mlp,8,8,0
-precision,fp32,fp16,1.4b 1024,out_proj,6,6,0
+precision,fp32,fp16,1.4b 1024,out_proj,5,5,0
 precision,fp32,fp16,1.4b 1024,loss,4,4,0
 precision,fp32,fp16,1.4b 2048,embed_lookup,5,5,0
 precision,fp32,fp16,1.4b 2048,ln,3,3,0
@@ -143,27 +143,27 @@ precision,fp32,fp16,1.4b 2048,attn_core,1,1,0
 precision,fp32,fp16,1.4b 2048,mlp,8,8,0
 precision,fp32,fp16,1.4b 2048,out_proj,6,6,0
 precision,fp32,fp16,1.4b 2048,loss,4,4,0
-precision,fp32,fp16,6.9b 512,embed_lookup,5,5,0
-precision,fp32,fp16,6.9b 512,ln,3,3,0
+precision,fp32,fp16,6.9b 512,embed_lookup,6,6,0
+precision,fp32,fp16,6.9b 512,ln,4,3,1
 precision,fp32,fp16,6.9b 512,attn_proj,8,7,1
-precision,fp32,fp16,6.9b 512,rope,2,2,0
-precision,fp32,fp16,6.9b 512,attn_core,1,1,0
-precision,fp32,fp16,6.9b 512,mlp,6,8,-2
-precision,fp32,fp16,6.9b 512,out_proj,7,6,1
-precision,fp32,fp16,6.9b 512,loss,4,4,0
-precision,fp32,fp16,6.9b 1024,embed_lookup,6,5,1
+precision,fp32,fp16,6.9b 512,rope,3,2,1
+precision,fp32,fp16,6.9b 512,attn_core,2,1,1
+precision,fp32,fp16,6.9b 512,mlp,1,8,-7
+precision,fp32,fp16,6.9b 512,out_proj,7,4,3
+precision,fp32,fp16,6.9b 512,loss,5,5,0
+precision,fp32,fp16,6.9b 1024,embed_lookup,6,6,0
 precision,fp32,fp16,6.9b 1024,ln,4,3,1
 precision,fp32,fp16,6.9b 1024,attn_proj,8,7,1
 precision,fp32,fp16,6.9b 1024,rope,3,2,1
-precision,fp32,fp16,6.9b 1024,attn_core,1,1,0
-precision,fp32,fp16,6.9b 1024,mlp,2,8,-6
-precision,fp32,fp16,6.9b 1024,out_proj,7,6,1
-precision,fp32,fp16,6.9b 1024,loss,5,4,1
-precision,fp32,fp16,6.9b 2048,embed_lookup,6,5,1
+precision,fp32,fp16,6.9b 1024,attn_core,2,1,1
+precision,fp32,fp16,6.9b 1024,mlp,1,8,-7
+precision,fp32,fp16,6.9b 1024,out_proj,7,4,3
+precision,fp32,fp16,6.9b 1024,loss,5,5,0
+precision,fp32,fp16,6.9b 2048,embed_lookup,6,6,0
 precision,fp32,fp16,6.9b 2048,ln,4,3,1
 precision,fp32,fp16,6.9b 2048,attn_proj,8,7,1
-precision,fp32,fp16,6.9b 2048,rope,2,2,0
-precision,fp32,fp16,6.9b 2048,attn_core,1,1,0
-precision,fp32,fp16,6.9b 2048,mlp,3,8,-5
-precision,fp32,fp16,6.9b 2048,out_proj,7,6,1
-precision,fp32,fp16,6.9b 2048,loss,5,4,1
+precision,fp32,fp16,6.9b 2048,rope,3,2,1
+precision,fp32,fp16,6.9b 2048,attn_core,2,1,1
+precision,fp32,fp16,6.9b 2048,mlp,1,8,-7
+precision,fp32,fp16,6.9b 2048,out_proj,7,4,3
+precision,fp32,fp16,6.9b 2048,loss,5,5,0

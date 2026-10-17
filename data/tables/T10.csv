@@ -1,127 +1,145 @@
 model,seq_len,precision,substitution,replaces,n_passes,e_total_base_j,e_total_sub_j,delta_pct_med,delta_pct_iqr,replaced_c3_med,sub_c3_med,sub_memory_bound,published_value
-pythia-160m,512,fp32,sdpa_core,attn_core,10,155.1,146.2,5.879,0.2635,0.1396,0.08581,False,"59x inference, 32x differentiation; runtime within a few percent of standard attention"
-pythia-160m,512,fp32,linear_core,attn_core,10,155.1,145.1,6.559,0.3003,0.1396,0.07787,True,
-pythia-160m,512,fp32,gqa_proj,attn_proj,10,155.1,145.9,6.054,0.7291,0.1783,0.1218,False,GQA-8 0.28 s vs MHA 1.51 s; avg 47.1 vs 47.2
-pythia-160m,512,fp32,factorized_embed,embed_lookup+out_proj,10,155.1,122,21.26,0.1334,0.2605,0.06089,False+False,89M vs 108M (-17.6%); avg 81.7 vs 82.3
-pythia-160m,512,fp32,rmsnorm,ln,10,155.1,158.9,-2.437,0.1142,0.008871,0.03262,True,
-pythia-160m,512,fp32,rmsnorm_fused,ln,10,155.1,155,0.08633,0.03734,0.008871,0.008174,True,about 7x faster; about 3x less peak memory
-pythia-160m,512,fp32,nope,rope,10,155.1,152,1.965,0.006823,0.01965,0,,20.97 vs 20.42 WikiText-103 (247M); 13.10 vs 13.05 the Pile (1.3B)
-pythia-160m,512,fp16,sdpa_core,attn_core,10,40.46,33.99,16,0.4092,0.2423,0.09788,True,"59x inference, 32x differentiation; runtime within a few percent of standard attention"
-pythia-160m,512,fp16,linear_core,attn_core,10,40.46,37.96,6.176,0.1519,0.2423,0.1923,True,
-pythia-160m,512,fp16,gqa_proj,attn_proj,10,40.46,39.04,3.217,0.3921,0.1295,0.09817,False,GQA-8 0.28 s vs MHA 1.51 s; avg 47.1 vs 47.2
-pythia-160m,512,fp16,factorized_embed,embed_lookup+out_proj,10,40.46,34.58,14.22,1.229,0.184,0.04856,True+True,89M vs 108M (-17.6%); avg 81.7 vs 82.3
-pythia-160m,512,fp16,rmsnorm,ln,10,40.46,42.55,-5.206,0.02865,0.02271,0.07104,True,
-pythia-160m,512,fp16,rmsnorm_fused,ln,10,40.46,40.26,0.4429,0.1134,0.02271,0.0181,True,about 7x faster; about 3x less peak memory
-pythia-160m,512,fp16,nope,rope,10,40.46,38.61,4.671,0.1298,0.04671,0,,20.97 vs 20.42 WikiText-103 (247M); 13.10 vs 13.05 the Pile (1.3B)
-pythia-160m,1024,fp32,sdpa_core,attn_core,10,176.4,155.3,11.85,0.3797,0.24,0.1392,False,"59x inference, 32x differentiation; runtime within a few percent of standard attention"
-pythia-160m,1024,fp32,linear_core,attn_core,10,176.4,145.5,17.66,0.3945,0.24,0.07927,True,
-pythia-160m,1024,fp32,gqa_proj,attn_proj,10,176.4,166.5,5.445,0.613,0.1564,0.1075,False,GQA-8 0.28 s vs MHA 1.51 s; avg 47.1 vs 47.2
-pythia-160m,1024,fp32,factorized_embed,embed_lookup+out_proj,10,176.4,143.6,18.65,0.6745,0.2286,0.05177,False+False,89M vs 108M (-17.6%); avg 81.7 vs 82.3
-pythia-160m,1024,fp32,rmsnorm,ln,10,176.4,180.5,-2.311,0.04452,0.00767,0.03,True,
-pythia-160m,1024,fp32,rmsnorm_fused,ln,10,176.4,176.3,0.04226,0.02058,0.00767,0.007168,True,about 7x faster; about 3x less peak memory
-pythia-160m,1024,fp32,nope,rope,10,176.4,173.4,1.725,0.04293,0.01725,0,,20.97 vs 20.42 WikiText-103 (247M); 13.10 vs 13.05 the Pile (1.3B)
-pythia-160m,1024,fp16,sdpa_core,attn_core,10,49.71,36.36,26.85,0.8343,0.3771,0.1487,True,"59x inference, 32x differentiation; runtime within a few percent of standard attention"
-pythia-160m,1024,fp16,linear_core,attn_core,10,49.71,38.13,23.23,0.8728,0.3771,0.1922,True,
-pythia-160m,1024,fp16,gqa_proj,attn_proj,10,49.71,48.34,2.724,0.1265,0.1042,0.07931,False,GQA-8 0.28 s vs MHA 1.51 s; avg 47.1 vs 47.2
-pythia-160m,1024,fp16,factorized_embed,embed_lookup+out_proj,10,49.71,43.96,11.69,0.503,0.1519,0.03939,True+True,89M vs 108M (-17.6%); avg 81.7 vs 82.3
-pythia-160m,1024,fp16,rmsnorm,ln,10,49.71,51.78,-4.211,0.1151,0.01882,0.05844,True,
-pythia-160m,1024,fp16,rmsnorm_fused,ln,10,49.71,49.47,0.4141,0.02711,0.01882,0.01471,True,about 7x faster; about 3x less peak memory
-pythia-160m,1024,fp16,nope,rope,10,49.71,47.84,3.807,0.1072,0.03807,0,,20.97 vs 20.42 WikiText-103 (247M); 13.10 vs 13.05 the Pile (1.3B)
-pythia-160m,2048,fp32,sdpa_core,attn_core,10,219,171.9,21.41,1.759,0.3825,0.2171,False,"59x inference, 32x differentiation; runtime within a few percent of standard attention"
-pythia-160m,2048,fp32,linear_core,attn_core,10,219,146.3,33.2,2.069,0.3825,0.07802,True,
-pythia-160m,2048,fp32,gqa_proj,attn_proj,10,219,209.5,4.389,0.1465,0.1262,0.08647,False,GQA-8 0.28 s vs MHA 1.51 s; avg 47.1 vs 47.2
-pythia-160m,2048,fp32,factorized_embed,embed_lookup+out_proj,10,219,186.1,15.1,0.5546,0.1872,0.0417,False+False,89M vs 108M (-17.6%); avg 81.7 vs 82.3
-pythia-160m,2048,fp32,rmsnorm,ln,10,219,223,-1.851,0.04511,0.006351,0.02421,True,
-pythia-160m,2048,fp32,rmsnorm_fused,ln,10,219,218.9,0.04653,0.02741,0.006351,0.005813,True,about 7x faster; about 3x less peak memory
-pythia-160m,2048,fp32,nope,rope,10,219,216,1.392,0.04086,0.01392,0,,20.97 vs 20.42 WikiText-103 (247M); 13.10 vs 13.05 the Pile (1.3B)
-pythia-160m,2048,fp16,sdpa_core,attn_core,10,66.54,39.68,40.36,0.1283,0.5434,0.2347,False,"59x inference, 32x differentiation; runtime within a few percent of standard attention"
-pythia-160m,2048,fp16,linear_core,attn_core,10,66.54,37.32,43.92,0.3948,0.5434,0.1866,True,
-pythia-160m,2048,fp16,gqa_proj,attn_proj,10,66.54,65.19,2.078,0.02749,0.07799,0.05842,False,GQA-8 0.28 s vs MHA 1.51 s; avg 47.1 vs 47.2
-pythia-160m,2048,fp16,factorized_embed,embed_lookup+out_proj,10,66.54,60.83,8.644,0.2534,0.1116,0.02761,True+True,89M vs 108M (-17.6%); avg 81.7 vs 82.3
-pythia-160m,2048,fp16,rmsnorm,ln,10,66.54,68.68,-3.176,0.01038,0.0137,0.04406,True,
-pythia-160m,2048,fp16,rmsnorm_fused,ln,10,66.54,66.38,0.2686,0.00387,0.0137,0.01106,True,about 7x faster; about 3x less peak memory
-pythia-160m,2048,fp16,nope,rope,10,66.54,64.65,2.834,0.01447,0.02834,0,,20.97 vs 20.42 WikiText-103 (247M); 13.10 vs 13.05 the Pile (1.3B)
-pythia-1.4b,512,fp32,sdpa_core,attn_core,10,1331,1314,1.282,0.05219,0.0608,0.04864,False,"59x inference, 32x differentiation; runtime within a few percent of standard attention"
-pythia-1.4b,512,fp32,linear_core,attn_core,10,1331,1321,0.648,0.244,0.0608,0.05477,True,
-pythia-1.4b,512,fp32,gqa_proj,attn_proj,10,1331,1195,10.4,1.247,0.2771,0.1933,False,GQA-8 0.28 s vs MHA 1.51 s; avg 47.1 vs 47.2
-pythia-1.4b,512,fp32,factorized_embed,embed_lookup+out_proj,10,1331,1238,7.003,0.2196,0.0758,0.006251,False+False,89M vs 108M (-17.6%); avg 81.7 vs 82.3
-pythia-1.4b,512,fp32,rmsnorm,ln,10,1331,1350,-1.413,0.06243,0.006511,0.02034,True,
-pythia-1.4b,512,fp32,rmsnorm_fused,ln,10,1331,1331,0.01521,0.002722,0.006511,0.006403,True,about 7x faster; about 3x less peak memory
-pythia-1.4b,512,fp32,nope,rope,10,1331,1316,1.128,0.04799,0.01128,0,,20.97 vs 20.42 WikiText-103 (247M); 13.10 vs 13.05 the Pile (1.3B)
-pythia-1.4b,512,fp16,sdpa_core,attn_core,10,275.1,262,4.899,0.4936,0.1114,0.06553,True,"59x inference, 32x differentiation; runtime within a few percent of standard attention"
-pythia-1.4b,512,fp16,linear_core,attn_core,10,275.1,282,-2.386,0.4663,0.1114,0.132,True,
-pythia-1.4b,512,fp16,gqa_proj,attn_proj,10,275.1,251.6,8.497,0.9713,0.2443,0.174,False,GQA-8 0.28 s vs MHA 1.51 s; avg 47.1 vs 47.2
-pythia-1.4b,512,fp16,factorized_embed,embed_lookup+out_proj,10,275.1,256.4,6.717,0.04662,0.07372,0.007031,True+True,89M vs 108M (-17.6%); avg 81.7 vs 82.3
-pythia-1.4b,512,fp16,rmsnorm,ln,10,275.1,285.8,-3.893,0.01719,0.01624,0.0531,True,
-pythia-1.4b,512,fp16,rmsnorm_fused,ln,10,275.1,274.3,0.2983,0.05388,0.01624,0.0133,True,about 7x faster; about 3x less peak memory
-pythia-1.4b,512,fp16,nope,rope,10,275.1,266.2,3.262,0.1123,0.03262,0,,20.97 vs 20.42 WikiText-103 (247M); 13.10 vs 13.05 the Pile (1.3B)
-pythia-1.4b,1024,fp32,sdpa_core,attn_core,10,1384,1341,2.977,0.459,0.1113,0.0843,False,"59x inference, 32x differentiation; runtime within a few percent of standard attention"
-pythia-1.4b,1024,fp32,linear_core,attn_core,10,1384,1300,5.996,0.5135,0.1113,0.05579,True,
-pythia-1.4b,1024,fp32,gqa_proj,attn_proj,10,1384,1246,10.01,0.06553,0.267,0.1854,False,GQA-8 0.28 s vs MHA 1.51 s; avg 47.1 vs 47.2
-pythia-1.4b,1024,fp32,factorized_embed,embed_lookup+out_proj,10,1384,1292,6.718,0.165,0.07278,0.005891,False+False,89M vs 108M (-17.6%); avg 81.7 vs 82.3
-pythia-1.4b,1024,fp32,rmsnorm,ln,10,1384,1403,-1.359,0.003206,0.006248,0.01957,True,
-pythia-1.4b,1024,fp32,rmsnorm_fused,ln,10,1384,1384,0.01231,0.0006989,0.006248,0.006131,True,about 7x faster; about 3x less peak memory
-pythia-1.4b,1024,fp32,nope,rope,10,1384,1369,1.085,0.002958,0.01085,0,,20.97 vs 20.42 WikiText-103 (247M); 13.10 vs 13.05 the Pile (1.3B)
-pythia-1.4b,1024,fp16,sdpa_core,attn_core,10,306.6,277,9.427,0.725,0.1835,0.09818,True,"59x inference, 32x differentiation; runtime within a few percent of standard attention"
-pythia-1.4b,1024,fp16,linear_core,attn_core,10,306.6,286.6,6.313,0.6009,0.1835,0.1268,True,
-pythia-1.4b,1024,fp16,gqa_proj,attn_proj,10,306.6,278.3,8.618,1.314,0.2338,0.1605,False,GQA-8 0.28 s vs MHA 1.51 s; avg 47.1 vs 47.2
-pythia-1.4b,1024,fp16,factorized_embed,embed_lookup+out_proj,10,306.6,288.1,6.265,0.4077,0.06838,0.006244,True+True,89M vs 108M (-17.6%); avg 81.7 vs 82.3
-pythia-1.4b,1024,fp16,rmsnorm,ln,10,306.6,317.4,-3.591,0.1149,0.01448,0.04796,True,
-pythia-1.4b,1024,fp16,rmsnorm_fused,ln,10,306.6,305.9,0.2349,0.06013,0.01448,0.01195,True,about 7x faster; about 3x less peak memory
-pythia-1.4b,1024,fp16,nope,rope,10,306.6,297.8,2.902,0.1929,0.02902,0,,20.97 vs 20.42 WikiText-103 (247M); 13.10 vs 13.05 the Pile (1.3B)
-pythia-1.4b,2048,fp32,sdpa_core,attn_core,10,1545,1448,6.077,0.6072,0.199,0.1445,False,"59x inference, 32x differentiation; runtime within a few percent of standard attention"
-pythia-1.4b,2048,fp32,linear_core,attn_core,10,1545,1312,15.26,0.2302,0.199,0.05515,True,
-pythia-1.4b,2048,fp32,gqa_proj,attn_proj,10,1545,1406,8.934,0.2981,0.2389,0.164,False,GQA-8 0.28 s vs MHA 1.51 s; avg 47.1 vs 47.2
-pythia-1.4b,2048,fp32,factorized_embed,embed_lookup+out_proj,10,1545,1452,6.016,0.02413,0.06523,0.005232,False+False,89M vs 108M (-17.6%); avg 81.7 vs 82.3
-pythia-1.4b,2048,fp32,rmsnorm,ln,10,1545,1563,-1.141,0.05731,0.005612,0.01684,True,
-pythia-1.4b,2048,fp32,rmsnorm_fused,ln,10,1545,1545,0.01061,0.004737,0.005612,0.005518,True,about 7x faster; about 3x less peak memory
-pythia-1.4b,2048,fp32,nope,rope,10,1545,1531,0.9718,0.003254,0.009718,0,,20.97 vs 20.42 WikiText-103 (247M); 13.10 vs 13.05 the Pile (1.3B)
-pythia-1.4b,2048,fp16,sdpa_core,attn_core,10,358.8,296.3,17.43,0.1885,0.3009,0.1535,False,"59x inference, 32x differentiation; runtime within a few percent of standard attention"
-pythia-1.4b,2048,fp16,linear_core,attn_core,10,358.8,287.1,20.14,0.7301,0.3009,0.1268,True,
-pythia-1.4b,2048,fp16,gqa_proj,attn_proj,10,358.8,336.5,6.494,0.6691,0.1868,0.13,False,GQA-8 0.28 s vs MHA 1.51 s; avg 47.1 vs 47.2
-pythia-1.4b,2048,fp16,factorized_embed,embed_lookup+out_proj,10,358.8,340.3,5.347,0.1548,0.0586,0.005348,True+True,89M vs 108M (-17.6%); avg 81.7 vs 82.3
-pythia-1.4b,2048,fp16,rmsnorm,ln,10,358.8,369.3,-3.001,0.09072,0.01243,0.04121,True,
-pythia-1.4b,2048,fp16,rmsnorm_fused,ln,10,358.8,358.1,0.2245,0.007545,0.01243,0.01022,True,about 7x faster; about 3x less peak memory
-pythia-1.4b,2048,fp16,nope,rope,10,358.8,349.8,2.495,0.01217,0.02495,0,,20.97 vs 20.42 WikiText-103 (247M); 13.10 vs 13.05 the Pile (1.3B)
-pythia-6.9b,512,fp32,sdpa_core,attn_core,10,7476,7422,0.669,0.07747,0.02889,0.02248,False,"59x inference, 32x differentiation; runtime within a few percent of standard attention"
-pythia-6.9b,512,fp32,linear_core,attn_core,10,7476,7449,0.3424,0.2163,0.02889,0.02574,True,
-pythia-6.9b,512,fp32,gqa_proj,attn_proj,10,7476,6480,13.35,0.366,0.2985,0.1909,False,GQA-8 0.28 s vs MHA 1.51 s; avg 47.1 vs 47.2
-pythia-6.9b,512,fp32,factorized_embed,embed_lookup+out_proj,10,7476,7309,2.229,0.06628,0.0234,0.001134,False+False,89M vs 108M (-17.6%); avg 81.7 vs 82.3
-pythia-6.9b,512,fp32,rmsnorm,ln,10,7476,7524,-0.6494,0.01786,0.003164,0.009597,True,
-pythia-6.9b,512,fp32,rmsnorm_fused,ln,10,7476,7476,0.0007734,0.0006099,0.003164,0.003155,True,about 7x faster; about 3x less peak memory
-pythia-6.9b,512,fp32,nope,rope,10,7476,7436,0.5284,0.02107,0.005284,0,,20.97 vs 20.42 WikiText-103 (247M); 13.10 vs 13.05 the Pile (1.3B)
-pythia-6.9b,512,fp16,sdpa_core,attn_core,10,1329,1292,2.747,0.1751,0.06193,0.03545,True,"59x inference, 32x differentiation; runtime within a few percent of standard attention"
-pythia-6.9b,512,fp16,linear_core,attn_core,10,1329,1345,-1.191,0.2903,0.06193,0.07298,True,
-pythia-6.9b,512,fp16,gqa_proj,attn_proj,10,1329,1196,10.01,0.5963,0.2852,0.2014,False,GQA-8 0.28 s vs MHA 1.51 s; avg 47.1 vs 47.2
-pythia-6.9b,512,fp16,factorized_embed,embed_lookup+out_proj,10,1329,1290,2.902,0.0863,0.03048,0.001455,True+True,89M vs 108M (-17.6%); avg 81.7 vs 82.3
-pythia-6.9b,512,fp16,rmsnorm,ln,10,1329,1355,-2.01,0.0323,0.009878,0.02938,True,
-pythia-6.9b,512,fp16,rmsnorm_fused,ln,10,1329,1327,0.08831,0.005519,0.009878,0.008997,True,about 7x faster; about 3x less peak memory
-pythia-6.9b,512,fp16,nope,rope,10,1329,1305,1.792,0.004551,0.01792,0,,20.97 vs 20.42 WikiText-103 (247M); 13.10 vs 13.05 the Pile (1.3B)
-pythia-6.9b,1024,fp32,sdpa_core,attn_core,10,7676,7554,1.587,0.02202,0.05542,0.04022,False,"59x inference, 32x differentiation; runtime within a few percent of standard attention"
-pythia-6.9b,1024,fp32,linear_core,attn_core,10,7676,7442,3.046,0.1096,0.05542,0.02641,True,
-pythia-6.9b,1024,fp32,gqa_proj,attn_proj,10,7676,6629,13.72,1.086,0.2964,0.185,False,GQA-8 0.28 s vs MHA 1.51 s; avg 47.1 vs 47.2
-pythia-6.9b,1024,fp32,factorized_embed,embed_lookup+out_proj,10,7676,7510,2.169,0.06566,0.02279,0.001119,False+False,89M vs 108M (-17.6%); avg 81.7 vs 82.3
-pythia-6.9b,1024,fp32,rmsnorm,ln,10,7676,7725,-0.6381,0.00378,0.003094,0.009407,True,
-pythia-6.9b,1024,fp32,rmsnorm_fused,ln,10,7676,7676,0.000397,0.0007554,0.003094,0.003086,True,about 7x faster; about 3x less peak memory
-pythia-6.9b,1024,fp32,nope,rope,10,7676,7636,0.5213,0.01179,0.005213,0,,20.97 vs 20.42 WikiText-103 (247M); 13.10 vs 13.05 the Pile (1.3B)
-pythia-6.9b,1024,fp16,sdpa_core,attn_core,10,1385,1308,5.708,0.2425,0.1074,0.05432,True,"59x inference, 32x differentiation; runtime within a few percent of standard attention"
-pythia-6.9b,1024,fp16,linear_core,attn_core,10,1385,1334,4.037,0.3257,0.1074,0.07247,True,
-pythia-6.9b,1024,fp16,gqa_proj,attn_proj,10,1385,1247,10.13,1.037,0.2735,0.1898,False,GQA-8 0.28 s vs MHA 1.51 s; avg 47.1 vs 47.2
-pythia-6.9b,1024,fp16,factorized_embed,embed_lookup+out_proj,10,1385,1347,2.685,0.1094,0.02819,0.001429,True+True,89M vs 108M (-17.6%); avg 81.7 vs 82.3
-pythia-6.9b,1024,fp16,rmsnorm,ln,10,1385,1413,-1.92,0.07156,0.009247,0.02823,True,
-pythia-6.9b,1024,fp16,rmsnorm_fused,ln,10,1385,1385,0.09394,0.03346,0.009247,0.008628,True,about 7x faster; about 3x less peak memory
-pythia-6.9b,1024,fp16,nope,rope,10,1385,1362,1.7,0.07089,0.017,0,,20.97 vs 20.42 WikiText-103 (247M); 13.10 vs 13.05 the Pile (1.3B)
-pythia-6.9b,2048,fp32,sdpa_core,attn_core,10,8102,7817,3.565,0.8105,0.1053,0.07291,False,"59x inference, 32x differentiation; runtime within a few percent of standard attention"
-pythia-6.9b,2048,fp32,linear_core,attn_core,10,8102,7444,8.156,0.5198,0.1053,0.02556,True,
-pythia-6.9b,2048,fp32,gqa_proj,attn_proj,10,8102,7058,12.95,0.6734,0.2817,0.1739,False,GQA-8 0.28 s vs MHA 1.51 s; avg 47.1 vs 47.2
-pythia-6.9b,2048,fp32,factorized_embed,embed_lookup+out_proj,10,8102,7938,2.06,0.03373,0.02163,0.001047,False+False,89M vs 108M (-17.6%); avg 81.7 vs 82.3
-pythia-6.9b,2048,fp32,rmsnorm,ln,10,8102,8151,-0.6078,0.004259,0.00293,0.00893,True,
-pythia-6.9b,2048,fp32,rmsnorm_fused,ln,10,8102,8102,0.0005132,0.001336,0.00293,0.002917,True,about 7x faster; about 3x less peak memory
-pythia-6.9b,2048,fp32,nope,rope,10,8102,8062,0.4925,0.006536,0.004925,0,,20.97 vs 20.42 WikiText-103 (247M); 13.10 vs 13.05 the Pile (1.3B)
-pythia-6.9b,2048,fp16,sdpa_core,attn_core,10,1543,1373,11.02,0.06753,0.188,0.08747,False,"59x inference, 32x differentiation; runtime within a few percent of standard attention"
-pythia-6.9b,2048,fp16,linear_core,attn_core,10,1543,1348,12.58,0.198,0.188,0.07119,True,
-pythia-6.9b,2048,fp16,gqa_proj,attn_proj,10,1543,1403,9.049,0.6476,0.2456,0.1712,False,GQA-8 0.28 s vs MHA 1.51 s; avg 47.1 vs 47.2
-pythia-6.9b,2048,fp16,factorized_embed,embed_lookup+out_proj,10,1543,1505,2.495,0.07799,0.02621,0.001293,True+True,89M vs 108M (-17.6%); avg 81.7 vs 82.3
-pythia-6.9b,2048,fp16,rmsnorm,ln,10,1543,1570,-1.726,0.0364,0.008594,0.02541,True,
-pythia-6.9b,2048,fp16,rmsnorm_fused,ln,10,1543,1542,0.08658,0.02969,0.008594,0.00774,True,about 7x faster; about 3x less peak memory
-pythia-6.9b,2048,fp16,nope,rope,10,1543,1519,1.559,0.05314,0.01559,0,,20.97 vs 20.42 WikiText-103 (247M); 13.10 vs 13.05 the Pile (1.3B)
+pythia-160m,512,fp32,sdpa_core,attn_core,10,174,162.6,6.586,0.2714,0.1388,0.07805,False,"59x inference, 32x differentiation; runtime within a few percent of standard attention"
+pythia-160m,512,fp32,linear_core,attn_core,10,174,162.2,6.616,0.3069,0.1388,0.07819,True,
+pythia-160m,512,fp32,gqa_proj,attn_proj,10,174,163.7,5.952,0.03052,0.1715,0.1198,False,GQA-8 0.28 s vs MHA 1.51 s; avg 47.1 vs 47.2
+pythia-160m,512,fp32,factorized_embed,embed_lookup+out_proj,10,174,136.9,21.27,0.2383,0.2587,0.05865,False+False,89M vs 108M (-17.6%); avg 81.7 vs 82.3
+pythia-160m,512,fp32,rmsnorm,ln,10,174,177.7,-2.177,0.03101,0.008911,0.03,True,
+pythia-160m,512,fp32,rmsnorm_fused,ln,10,174,173.7,0.1363,0.00783,0.008911,0.007557,True,about 7x faster; about 3x less peak memory
+pythia-160m,512,fp32,rope_fused,rope,10,174,171.6,1.352,0.01314,0.01742,0.003964,True,about 8x faster; about 3x lower memory
+pythia-160m,512,fp32,nope,rope,10,174,171,1.742,0.01339,0.01742,0,,20.97 vs 20.42 WikiText-103 (247M); 13.10 vs 13.05 the Pile (1.3B)
+pythia-160m,512,fp16,sdpa_core,attn_core,10,44.11,37.02,16.09,0.6162,0.2437,0.09863,True,"59x inference, 32x differentiation; runtime within a few percent of standard attention"
+pythia-160m,512,fp16,linear_core,attn_core,10,44.11,40.72,7.402,0.3252,0.2437,0.1813,True,
+pythia-160m,512,fp16,gqa_proj,attn_proj,10,44.11,42.62,3.396,0.3288,0.1285,0.09837,False,GQA-8 0.28 s vs MHA 1.51 s; avg 47.1 vs 47.2
+pythia-160m,512,fp16,factorized_embed,embed_lookup+out_proj,10,44.11,37.65,14.62,0.4553,0.1897,0.05181,True+True,89M vs 108M (-17.6%); avg 81.7 vs 82.3
+pythia-160m,512,fp16,rmsnorm,ln,10,44.11,46.09,-4.497,0.09175,0.02376,0.06579,True,
+pythia-160m,512,fp16,rmsnorm_fused,ln,10,44.11,43.88,0.4775,0.1192,0.02376,0.01881,True,about 7x faster; about 3x less peak memory
+pythia-160m,512,fp16,rope_fused,rope,10,44.11,42.76,3.1,0.1262,0.04247,0.0119,True,about 8x faster; about 3x lower memory
+pythia-160m,512,fp16,nope,rope,10,44.11,42.25,4.247,0.1761,0.04247,0,,20.97 vs 20.42 WikiText-103 (247M); 13.10 vs 13.05 the Pile (1.3B)
+pythia-160m,1024,fp32,sdpa_core,attn_core,10,195.3,168.2,13.46,0.9211,0.2456,0.1292,False,"59x inference, 32x differentiation; runtime within a few percent of standard attention"
+pythia-160m,1024,fp32,linear_core,attn_core,10,195.3,159.2,18.15,0.8084,0.2456,0.07889,True,
+pythia-160m,1024,fp32,gqa_proj,attn_proj,10,195.3,184.4,5.304,0.2494,0.1535,0.1063,False,GQA-8 0.28 s vs MHA 1.51 s; avg 47.1 vs 47.2
+pythia-160m,1024,fp32,factorized_embed,embed_lookup+out_proj,10,195.3,158.4,18.88,0.5772,0.2309,0.05173,False+False,89M vs 108M (-17.6%); avg 81.7 vs 82.3
+pythia-160m,1024,fp32,rmsnorm,ln,10,195.3,199.1,-1.969,0.05289,0.007766,0.02678,True,
+pythia-160m,1024,fp32,rmsnorm_fused,ln,10,195.3,195.1,0.1091,0.007034,0.007766,0.006706,True,about 7x faster; about 3x less peak memory
+pythia-160m,1024,fp32,rope_fused,rope,10,195.3,192.9,1.195,0.01105,0.01543,0.003531,True,about 8x faster; about 3x lower memory
+pythia-160m,1024,fp32,nope,rope,10,195.3,192.3,1.543,0.01404,0.01543,0,,20.97 vs 20.42 WikiText-103 (247M); 13.10 vs 13.05 the Pile (1.3B)
+pythia-160m,1024,fp16,sdpa_core,attn_core,10,54.52,40.12,27.1,1.384,0.3738,0.1449,True,"59x inference, 32x differentiation; runtime within a few percent of standard attention"
+pythia-160m,1024,fp16,linear_core,attn_core,10,54.52,41.73,24.25,0.9484,0.3738,0.1776,True,
+pythia-160m,1024,fp16,gqa_proj,attn_proj,10,54.52,52.86,2.859,0.281,0.1076,0.08009,False,GQA-8 0.28 s vs MHA 1.51 s; avg 47.1 vs 47.2
+pythia-160m,1024,fp16,factorized_embed,embed_lookup+out_proj,10,54.52,48.03,11.93,0.3318,0.1537,0.04074,True+True,89M vs 108M (-17.6%); avg 81.7 vs 82.3
+pythia-160m,1024,fp16,rmsnorm,ln,10,54.52,56.41,-3.573,0.1368,0.01978,0.05357,True,
+pythia-160m,1024,fp16,rmsnorm_fused,ln,10,54.52,54.28,0.4498,0.0945,0.01978,0.01531,True,about 7x faster; about 3x less peak memory
+pythia-160m,1024,fp16,rope_fused,rope,10,54.52,53.13,2.52,0.09679,0.03416,0.009456,True,about 8x faster; about 3x lower memory
+pythia-160m,1024,fp16,nope,rope,10,54.52,52.63,3.416,0.08497,0.03416,0,,20.97 vs 20.42 WikiText-103 (247M); 13.10 vs 13.05 the Pile (1.3B)
+pythia-160m,2048,fp32,sdpa_core,attn_core,10,240.1,185.5,22.71,0.2558,0.3821,0.1998,False,"59x inference, 32x differentiation; runtime within a few percent of standard attention"
+pythia-160m,2048,fp32,linear_core,attn_core,10,240.1,160.9,32.99,0.3649,0.3821,0.07655,True,
+pythia-160m,2048,fp32,gqa_proj,attn_proj,10,240.1,230,4.196,0.5506,0.1243,0.08707,False,GQA-8 0.28 s vs MHA 1.51 s; avg 47.1 vs 47.2
+pythia-160m,2048,fp32,factorized_embed,embed_lookup+out_proj,10,240.1,203.3,15.32,0.544,0.1874,0.04035,False+False,89M vs 108M (-17.6%); avg 81.7 vs 82.3
+pythia-160m,2048,fp32,rmsnorm,ln,10,240.1,243.9,-1.587,0.07043,0.00609,0.02176,True,
+pythia-160m,2048,fp32,rmsnorm_fused,ln,10,240.1,239.9,0.0609,0.02852,0.00609,0.005468,True,about 7x faster; about 3x less peak memory
+pythia-160m,2048,fp32,rope_fused,rope,10,240.1,237.8,0.9677,0.006491,0.01255,0.002899,True,about 8x faster; about 3x lower memory
+pythia-160m,2048,fp32,nope,rope,10,240.1,237.1,1.255,0.008739,0.01255,0,,20.97 vs 20.42 WikiText-103 (247M); 13.10 vs 13.05 the Pile (1.3B)
+pythia-160m,2048,fp16,sdpa_core,attn_core,10,73.04,42.72,41.54,1.334,0.5485,0.2279,False,"59x inference, 32x differentiation; runtime within a few percent of standard attention"
+pythia-160m,2048,fp16,linear_core,attn_core,10,73.04,40.04,45.24,1.603,0.5485,0.1813,True,
+pythia-160m,2048,fp16,gqa_proj,attn_proj,10,73.04,71.49,2.118,0.07759,0.07875,0.05884,False,GQA-8 0.28 s vs MHA 1.51 s; avg 47.1 vs 47.2
+pythia-160m,2048,fp16,factorized_embed,embed_lookup+out_proj,10,73.04,66.71,9.012,0.413,0.1164,0.02891,True+True,89M vs 108M (-17.6%); avg 81.7 vs 82.3
+pythia-160m,2048,fp16,rmsnorm,ln,10,73.04,75,-2.706,0.08937,0.01484,0.04037,True,
+pythia-160m,2048,fp16,rmsnorm_fused,ln,10,73.04,72.79,0.342,0.06135,0.01484,0.01148,True,about 7x faster; about 3x less peak memory
+pythia-160m,2048,fp16,rope_fused,rope,10,73.04,71.68,1.897,0.06637,0.0258,0.006995,True,about 8x faster; about 3x lower memory
+pythia-160m,2048,fp16,nope,rope,10,73.04,71.19,2.58,0.0239,0.0258,0,,20.97 vs 20.42 WikiText-103 (247M); 13.10 vs 13.05 the Pile (1.3B)
+pythia-1.4b,512,fp32,sdpa_core,attn_core,10,1441,1412,2.002,0.06963,0.06437,0.04539,False,"59x inference, 32x differentiation; runtime within a few percent of standard attention"
+pythia-1.4b,512,fp32,linear_core,attn_core,10,1441,1428,0.8799,0.02675,0.06437,0.05616,True,
+pythia-1.4b,512,fp32,gqa_proj,attn_proj,10,1441,1284,10.85,0.3605,0.2825,0.1953,False,GQA-8 0.28 s vs MHA 1.51 s; avg 47.1 vs 47.2
+pythia-1.4b,512,fp32,factorized_embed,embed_lookup+out_proj,10,1441,1339,7.269,0.4331,0.07872,0.006477,False+False,89M vs 108M (-17.6%); avg 81.7 vs 82.3
+pythia-1.4b,512,fp32,rmsnorm,ln,10,1441,1459,-1.293,0.04151,0.006114,0.01856,True,
+pythia-1.4b,512,fp32,rmsnorm_fused,ln,10,1441,1440,0.02947,0.001476,0.006114,0.005822,True,about 7x faster; about 3x less peak memory
+pythia-1.4b,512,fp32,rope_fused,rope,10,1441,1429,0.7883,0.02338,0.01036,0.0025,True,about 8x faster; about 3x lower memory
+pythia-1.4b,512,fp32,nope,rope,10,1441,1426,1.036,0.02905,0.01036,0,,20.97 vs 20.42 WikiText-103 (247M); 13.10 vs 13.05 the Pile (1.3B)
+pythia-1.4b,512,fp16,sdpa_core,attn_core,10,310.6,295.7,4.815,0.1068,0.1082,0.06299,True,"59x inference, 32x differentiation; runtime within a few percent of standard attention"
+pythia-1.4b,512,fp16,linear_core,attn_core,10,310.6,316.8,-1.706,0.5602,0.1082,0.1231,True,
+pythia-1.4b,512,fp16,gqa_proj,attn_proj,10,310.6,285.3,8.034,0.9202,0.2355,0.1685,False,GQA-8 0.28 s vs MHA 1.51 s; avg 47.1 vs 47.2
+pythia-1.4b,512,fp16,factorized_embed,embed_lookup+out_proj,10,310.6,286.2,7.795,0.3852,0.08446,0.006966,True+True,89M vs 108M (-17.6%); avg 81.7 vs 82.3
+pythia-1.4b,512,fp16,rmsnorm,ln,10,310.6,320.6,-3.213,0.08971,0.01664,0.04752,True,
+pythia-1.4b,512,fp16,rmsnorm_fused,ln,10,310.6,312.5,-0.5384,0.09273,0.01664,0.02193,True,about 7x faster; about 3x less peak memory
+pythia-1.4b,512,fp16,rope_fused,rope,10,310.6,304.9,1.636,0.1183,0.02943,0.01315,True,about 8x faster; about 3x lower memory
+pythia-1.4b,512,fp16,nope,rope,10,310.6,301.2,2.943,0.1424,0.02943,0,,20.97 vs 20.42 WikiText-103 (247M); 13.10 vs 13.05 the Pile (1.3B)
+pythia-1.4b,1024,fp32,sdpa_core,attn_core,10,1496,1435,4.178,0.234,0.1175,0.07902,False,"59x inference, 32x differentiation; runtime within a few percent of standard attention"
+pythia-1.4b,1024,fp32,linear_core,attn_core,10,1496,1398,6.401,0.252,0.1175,0.05708,True,
+pythia-1.4b,1024,fp32,gqa_proj,attn_proj,10,1496,1341,10.43,0.642,0.2721,0.1872,False,GQA-8 0.28 s vs MHA 1.51 s; avg 47.1 vs 47.2
+pythia-1.4b,1024,fp32,factorized_embed,embed_lookup+out_proj,10,1496,1396,6.788,0.3306,0.07352,0.006124,False+False,89M vs 108M (-17.6%); avg 81.7 vs 82.3
+pythia-1.4b,1024,fp32,rmsnorm,ln,10,1496,1515,-1.233,0.007231,0.005795,0.0179,True,
+pythia-1.4b,1024,fp32,rmsnorm_fused,ln,10,1496,1496,0.01857,0.01969,0.005795,0.005607,True,about 7x faster; about 3x less peak memory
+pythia-1.4b,1024,fp32,rope_fused,rope,10,1496,1485,0.7557,0.004803,0.009976,0.002436,True,about 8x faster; about 3x lower memory
+pythia-1.4b,1024,fp32,nope,rope,10,1496,1481,0.9976,0.004401,0.009976,0,,20.97 vs 20.42 WikiText-103 (247M); 13.10 vs 13.05 the Pile (1.3B)
+pythia-1.4b,1024,fp16,sdpa_core,attn_core,10,346.6,310.3,10.44,0.03299,0.1852,0.09029,True,"59x inference, 32x differentiation; runtime within a few percent of standard attention"
+pythia-1.4b,1024,fp16,linear_core,attn_core,10,346.6,319.9,7.85,0.4183,0.1852,0.1145,True,
+pythia-1.4b,1024,fp16,gqa_proj,attn_proj,10,346.6,320.6,7.37,0.5779,0.2109,0.148,False,GQA-8 0.28 s vs MHA 1.51 s; avg 47.1 vs 47.2
+pythia-1.4b,1024,fp16,factorized_embed,embed_lookup+out_proj,10,346.6,322.5,6.965,0.04194,0.07551,0.006297,True+True,89M vs 108M (-17.6%); avg 81.7 vs 82.3
+pythia-1.4b,1024,fp16,rmsnorm,ln,10,346.6,356.6,-2.931,0.07569,0.01471,0.04275,True,
+pythia-1.4b,1024,fp16,rmsnorm_fused,ln,10,346.6,348.3,-0.4506,0.1295,0.01471,0.01973,True,about 7x faster; about 3x less peak memory
+pythia-1.4b,1024,fp16,rope_fused,rope,10,346.6,340.7,1.689,0.08495,0.02681,0.009875,True,about 8x faster; about 3x lower memory
+pythia-1.4b,1024,fp16,nope,rope,10,346.6,337.3,2.681,0.1233,0.02681,0,,20.97 vs 20.42 WikiText-103 (247M); 13.10 vs 13.05 the Pile (1.3B)
+pythia-1.4b,2048,fp32,sdpa_core,attn_core,10,1659,1539,7.124,0.4569,0.2014,0.1395,False,"59x inference, 32x differentiation; runtime within a few percent of standard attention"
+pythia-1.4b,2048,fp32,linear_core,attn_core,10,1659,1402,15.32,0.3127,0.2014,0.05721,True,
+pythia-1.4b,2048,fp32,gqa_proj,attn_proj,10,1659,1503,9.416,0.4521,0.2454,0.168,False,GQA-8 0.28 s vs MHA 1.51 s; avg 47.1 vs 47.2
+pythia-1.4b,2048,fp32,factorized_embed,embed_lookup+out_proj,10,1659,1556,6.132,0.2949,0.06645,0.005393,False+False,89M vs 108M (-17.6%); avg 81.7 vs 82.3
+pythia-1.4b,2048,fp32,rmsnorm,ln,10,1659,1677,-1.11,0.00744,0.005218,0.01613,True,
+pythia-1.4b,2048,fp32,rmsnorm_fused,ln,10,1659,1658,0.01488,0.0005583,0.005218,0.005073,True,about 7x faster; about 3x less peak memory
+pythia-1.4b,2048,fp32,rope_fused,rope,10,1659,1648,0.6598,0.002323,0.008999,0.002416,True,about 8x faster; about 3x lower memory
+pythia-1.4b,2048,fp32,nope,rope,10,1659,1644,0.8999,0.003668,0.008999,0,,20.97 vs 20.42 WikiText-103 (247M); 13.10 vs 13.05 the Pile (1.3B)
+pythia-1.4b,2048,fp16,sdpa_core,attn_core,10,396.8,322,18.85,0.6592,0.306,0.1422,False,"59x inference, 32x differentiation; runtime within a few percent of standard attention"
+pythia-1.4b,2048,fp16,linear_core,attn_core,10,396.8,311.3,21.29,0.9621,0.306,0.1143,True,
+pythia-1.4b,2048,fp16,gqa_proj,attn_proj,10,396.8,371.1,6.32,0.8565,0.1849,0.1286,False,GQA-8 0.28 s vs MHA 1.51 s; avg 47.1 vs 47.2
+pythia-1.4b,2048,fp16,factorized_embed,embed_lookup+out_proj,10,396.8,371.7,6.102,0.2278,0.06623,0.005328,True+True,89M vs 108M (-17.6%); avg 81.7 vs 82.3
+pythia-1.4b,2048,fp16,rmsnorm,ln,10,396.8,406.8,-2.47,0.08788,0.01294,0.03689,True,
+pythia-1.4b,2048,fp16,rmsnorm_fused,ln,10,396.8,398.4,-0.419,0.06732,0.01294,0.01729,True,about 7x faster; about 3x less peak memory
+pythia-1.4b,2048,fp16,rope_fused,rope,10,396.8,391.6,1.276,0.0866,0.02258,0.01021,True,about 8x faster; about 3x lower memory
+pythia-1.4b,2048,fp16,nope,rope,10,396.8,387.5,2.258,0.1414,0.02258,0,,20.97 vs 20.42 WikiText-103 (247M); 13.10 vs 13.05 the Pile (1.3B)
+pythia-6.9b,512,fp32,sdpa_core,attn_core,10,9210,9135,0.7919,0.07977,0.02682,0.01918,False,"59x inference, 32x differentiation; runtime within a few percent of standard attention"
+pythia-6.9b,512,fp32,linear_core,attn_core,10,9210,9177,0.3592,0.007317,0.02682,0.02333,True,
+pythia-6.9b,512,fp32,gqa_proj,attn_proj,10,9210,8090,12.17,0.1939,0.2652,0.1634,False,GQA-8 0.28 s vs MHA 1.51 s; avg 47.1 vs 47.2
+pythia-6.9b,512,fp32,factorized_embed,embed_lookup+out_proj,10,9210,9026,2.004,0.06753,0.02104,0.001021,False+False,89M vs 108M (-17.6%); avg 81.7 vs 82.3
+pythia-6.9b,512,fp32,rmsnorm,ln,10,9210,9259,-0.518,0.01144,0.002561,0.007698,True,
+pythia-6.9b,512,fp32,rmsnorm_fused,ln,10,9210,9211,0.003027,0.0008122,0.002561,0.002531,True,about 7x faster; about 3x less peak memory
+pythia-6.9b,512,fp32,rope_fused,rope,10,9210,9181,0.3264,0.001575,0.004301,0.001041,True,about 8x faster; about 3x lower memory
+pythia-6.9b,512,fp32,nope,rope,10,9210,9171,0.4301,0.001726,0.004301,0,,20.97 vs 20.42 WikiText-103 (247M); 13.10 vs 13.05 the Pile (1.3B)
+pythia-6.9b,512,fp16,sdpa_core,attn_core,10,1477,1438,2.632,0.3304,0.05908,0.03366,True,"59x inference, 32x differentiation; runtime within a few percent of standard attention"
+pythia-6.9b,512,fp16,linear_core,attn_core,10,1477,1495,-1.086,0.5063,0.05908,0.06895,True,
+pythia-6.9b,512,fp16,gqa_proj,attn_proj,10,1477,1316,10.9,0.5192,0.2859,0.1977,False,GQA-8 0.28 s vs MHA 1.51 s; avg 47.1 vs 47.2
+pythia-6.9b,512,fp16,factorized_embed,embed_lookup+out_proj,10,1477,1423,3.569,0.2375,0.03715,0.001507,True+True,89M vs 108M (-17.6%); avg 81.7 vs 82.3
+pythia-6.9b,512,fp16,rmsnorm,ln,10,1477,1496,-1.11,0.09683,0.01552,0.02676,True,
+pythia-6.9b,512,fp16,rmsnorm_fused,ln,10,1477,1475,0.314,0.08134,0.01552,0.01242,True,about 7x faster; about 3x less peak memory
+pythia-6.9b,512,fp16,rope_fused,rope,10,1477,1461,1.051,0.05813,0.01661,0.006002,True,about 8x faster; about 3x lower memory
+pythia-6.9b,512,fp16,nope,rope,10,1477,1452,1.661,0.05571,0.01661,0,,20.97 vs 20.42 WikiText-103 (247M); 13.10 vs 13.05 the Pile (1.3B)
+pythia-6.9b,1024,fp32,sdpa_core,attn_core,10,9438,9271,1.716,0.0105,0.04965,0.03305,False,"59x inference, 32x differentiation; runtime within a few percent of standard attention"
+pythia-6.9b,1024,fp32,linear_core,attn_core,10,9438,9174,2.699,0.04986,0.04965,0.02332,True,
+pythia-6.9b,1024,fp32,gqa_proj,attn_proj,10,9438,8316,11.9,0.2797,0.2588,0.159,False,GQA-8 0.28 s vs MHA 1.51 s; avg 47.1 vs 47.2
+pythia-6.9b,1024,fp32,factorized_embed,embed_lookup+out_proj,10,9438,9251,1.984,0.09731,0.02084,0.0009979,False+False,89M vs 108M (-17.6%); avg 81.7 vs 82.3
+pythia-6.9b,1024,fp32,rmsnorm,ln,10,9438,9485,-0.5056,0.001499,0.002501,0.007516,True,
+pythia-6.9b,1024,fp32,rmsnorm_fused,ln,10,9438,9437,0.003112,0.0004305,0.002501,0.002468,True,about 7x faster; about 3x less peak memory
+pythia-6.9b,1024,fp32,rope_fused,rope,10,9438,9407,0.3183,0.003983,0.004207,0.001028,True,about 8x faster; about 3x lower memory
+pythia-6.9b,1024,fp32,nope,rope,10,9438,9398,0.4207,0.0007982,0.004207,0,,20.97 vs 20.42 WikiText-103 (247M); 13.10 vs 13.05 the Pile (1.3B)
+pythia-6.9b,1024,fp16,sdpa_core,attn_core,10,1550,1455,6.124,0.4018,0.1086,0.05036,True,"59x inference, 32x differentiation; runtime within a few percent of standard attention"
+pythia-6.9b,1024,fp16,linear_core,attn_core,10,1550,1481,4.514,0.3186,0.1086,0.0666,True,
+pythia-6.9b,1024,fp16,gqa_proj,attn_proj,10,1550,1398,9.842,0.4003,0.2728,0.1889,False,GQA-8 0.28 s vs MHA 1.51 s; avg 47.1 vs 47.2
+pythia-6.9b,1024,fp16,factorized_embed,embed_lookup+out_proj,10,1550,1495,3.4,0.02249,0.0354,0.001448,True+True,89M vs 108M (-17.6%); avg 81.7 vs 82.3
+pythia-6.9b,1024,fp16,rmsnorm,ln,10,1550,1568,-1.059,0.1294,0.01447,0.02552,True,
+pythia-6.9b,1024,fp16,rmsnorm_fused,ln,10,1550,1547,0.2912,0.04779,0.01447,0.01182,True,about 7x faster; about 3x less peak memory
+pythia-6.9b,1024,fp16,rope_fused,rope,10,1550,1534,1.003,0.02974,0.01573,0.005747,True,about 8x faster; about 3x lower memory
+pythia-6.9b,1024,fp16,nope,rope,10,1550,1525,1.573,0.003009,0.01573,0,,20.97 vs 20.42 WikiText-103 (247M); 13.10 vs 13.05 the Pile (1.3B)
+pythia-6.9b,2048,fp32,sdpa_core,attn_core,10,9856,9503,3.581,0.04389,0.09342,0.05975,False,"59x inference, 32x differentiation; runtime within a few percent of standard attention"
+pythia-6.9b,2048,fp32,linear_core,attn_core,10,9856,9149,7.17,0.1487,0.09342,0.02333,True,
+pythia-6.9b,2048,fp32,gqa_proj,attn_proj,10,9856,8717,11.41,0.4284,0.2481,0.1515,False,GQA-8 0.28 s vs MHA 1.51 s; avg 47.1 vs 47.2
+pythia-6.9b,2048,fp32,factorized_embed,embed_lookup+out_proj,10,9856,9670,1.932,0.1148,0.02027,0.0009604,False+False,89M vs 108M (-17.6%); avg 81.7 vs 82.3
+pythia-6.9b,2048,fp32,rmsnorm,ln,10,9856,9904,-0.4849,0.007466,0.002387,0.007199,True,
+pythia-6.9b,2048,fp32,rmsnorm_fused,ln,10,9856,9856,0.002063,0.0002819,0.002387,0.002367,True,about 7x faster; about 3x less peak memory
+pythia-6.9b,2048,fp32,rope_fused,rope,10,9856,9828,0.2945,0.001441,0.004019,0.001079,True,about 8x faster; about 3x lower memory
+pythia-6.9b,2048,fp32,nope,rope,10,9856,9818,0.4019,0.001729,0.004019,0,,20.97 vs 20.42 WikiText-103 (247M); 13.10 vs 13.05 the Pile (1.3B)
+pythia-6.9b,2048,fp16,sdpa_core,attn_core,10,1694,1492,11.88,0.4895,0.19,0.0806,False,"59x inference, 32x differentiation; runtime within a few percent of standard attention"
+pythia-6.9b,2048,fp16,linear_core,attn_core,10,1694,1471,13.43,0.7824,0.19,0.06427,True,
+pythia-6.9b,2048,fp16,gqa_proj,attn_proj,10,1694,1540,9.374,0.9117,0.2501,0.1705,False,GQA-8 0.28 s vs MHA 1.51 s; avg 47.1 vs 47.2
+pythia-6.9b,2048,fp16,factorized_embed,embed_lookup+out_proj,10,1694,1641,3.1,0.125,0.0323,0.001283,True+True,89M vs 108M (-17.6%); avg 81.7 vs 82.3
+pythia-6.9b,2048,fp16,rmsnorm,ln,10,1694,1711,-1.016,0.08236,0.01332,0.0234,True,
+pythia-6.9b,2048,fp16,rmsnorm_fused,ln,10,1694,1690,0.2433,0.05384,0.01332,0.01088,True,about 7x faster; about 3x less peak memory
+pythia-6.9b,2048,fp16,rope_fused,rope,10,1694,1680,0.8066,0.03876,0.0144,0.006387,True,about 8x faster; about 3x lower memory
+pythia-6.9b,2048,fp16,nope,rope,10,1694,1669,1.44,0.01311,0.0144,0,,20.97 vs 20.42 WikiText-103 (247M); 13.10 vs 13.05 the Pile (1.3B)

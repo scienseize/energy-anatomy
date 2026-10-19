@@ -1,6 +1,6 @@
 # Chapter II additions: Table 2, Table 3, and four references
 
-Draft, 2026-10-19, for Bill's review. Nothing is applied to the Google Doc until approved. Follows the numbering decision of 2026-10-19 (option a): add the missing Tables 2 and 3 so the repo's table numbers T2 to T10 hold in the manuscript.
+**Applied to the Google Doc on 2026-10-19 after Bill approved all (A1 to A5).** Each insertion was verified by reading the doc back (text and every table cell match this file) and by a rendered PDF check. Draft, 2026-10-19. Follows the numbering decision of 2026-10-19 (option a): add the missing Tables 2 and 3 so the repo's table numbers T2 to T10 hold in the manuscript.
 
 Sources: `data/tables/T2.csv` (configurations) and `data/tables/T3.csv` (screening record, from `data/manual/sources.csv`). One fix made while drafting: S17 (Zhang & Sennrich) still read "pre-2021, not a listed exception" in `sources.csv`, but R4 (applied 2026-10-17) added it to the seminal-exception list; `sources.csv` and T3 now say "listed seminal exception".
 
@@ -30,32 +30,31 @@ Placed after the paragraph beginning "Purely methodological references", before 
 
 ## A3. Table 3, inserted after the Phase 1 paragraph
 
-Phase 1 ends "The screening record, with each source's decision against every criterion, is summarized in Table 3." The table follows that paragraph. Criterion numbers refer to Table 1 (content criteria 1 energy or timing data, 2 specifications, 3 capability effect). "Scholarly" abbreviates "scholarly repository". All 18 screened sources are listed.
+Phase 1 ends "The screening record, with each source's decision against every criterion, is summarized in Table 3." The table follows that paragraph. Criterion numbers refer to Table 1 (content criteria 1 energy or timing data, 2 specifications, 3 capability effect). All 18 screened sources are listed. As applied, the Verifiability column is folded into the table note (17 of 18 sources share one value, and eight columns do not fit the page legibly), and the table is set in 8 pt.
 
 **Table 3.** Screening record of the published sources
 
-| Source | Used for | Content (Table 1) | Relevance to training | Recency | Verifiability | Model scale | Decision |
-|---|---|---|---|---|---|---|---|
-| He, Sun, et al. (2024) | Capability evidence | 3: removing a component | Adaptable: layers dropped from pretrained models | 2021 or later | Scholarly (preprint) | Llama-2 13B and 70B, Mistral 7B | Admitted |
-| He and Hofmann (2024) | Capability evidence | 3: simplifying a component | Training: simplified blocks trained from scratch | 2021 or later | Scholarly | 18-block, width-768 decoder; Crammed BERT | Admitted |
-| Haviv et al. (2022) | Capability evidence; positional-encoding removal | 3: removing a component | Training: language models trained without positional encoding | 2021 or later | Scholarly | 247M; 1.3B | Admitted |
-| Kazemnejad et al. (2023) | Capability evidence (supporting); positional-encoding removal | 3: removing a component | Training: models trained with each encoding | 2021 or later | Scholarly | 1.3B | Admitted |
-| Zhu et al. (2025) | Capability evidence | 3: replacing a component | Training: LLaMA pretrained without normalization layers | 2021 or later | Scholarly | LLaMA 7B to 70B | Admitted |
-| H. W. Chung et al. (2021) | Capability evidence | 3: shrinking a component | Training: multilingual pretraining | 2021 or later | Scholarly | 12-layer, width-768 encoder | Admitted |
-| Ainslie et al. (2023) | Capability evidence; grouped-query attention | 3: reducing key-value heads; 1: timing | Inference timing, with a stated path to training (uptraining) | 2021 or later | Scholarly | T5-Large, T5-XXL | Admitted |
-| Lan et al. (2020) | Capability evidence; factorized embedding | 3: factorizing a component | Training: pretraining | Before 2021, seminal exception | Scholarly | ALBERT-base | Admitted |
-| Michel et al. (2019) | Capability evidence | 3: pruning attention heads | Adaptable: heads pruned from trained models | Before 2021, not an exception | Scholarly | BERT; WMT Transformer | Excluded (recency) |
-| Press and Wolf (2017) | Capability evidence (supporting) | 3: tying the embeddings | Training | Before 2021, not an exception | Scholarly | LSTM language models | Excluded (recency) |
-| Geva et al. (2021) | Context | None quantitative (mechanism only) | Not applicable | 2021 or later | Scholarly | Not reported | Context only |
-| Brody et al. (2023) | Context | None quantitative for language-model quality | Not applicable | 2021 or later | Scholarly | Not reported | Context only |
-| Rabe and Staats (2021) | Memory-efficient attention | 1: memory and runtime | Training: backward pass measured | 2021 or later | Scholarly | Not reported | Admitted |
-| Lefaudeux et al. (2022) | Memory-efficient attention kernel | Kernel implementation | Training and inference | 2021 or later | Official vendor publication (code repository) | Not reported | Admitted as method |
-| Katharopoulos et al. (2020) | Linear attention | 1: timing | Training: time per epoch | Before 2021, seminal exception | Scholarly | Not reported | Admitted as method |
-| Shazeer (2019) | Origin of grouped-query attention (multi-query attention) | 1: timing | Inference only (decoding) | Before 2021, seminal exception | Scholarly | WMT14 Transformer | Admitted as method |
-| Zhang and Sennrich (2019) | Root mean square normalization | 1: running time | Training: running time per 1,000 steps | Before 2021, seminal exception | Scholarly | Transformer and others | Admitted as method |
-| Hsu et al. (2024) | Fused normalization and rotary kernels | 1: kernel speed and memory | Adaptable: kernels for language-model training | 2021 or later | Scholarly | Kernel benchmark | Admitted |
-
-*Note.* Admitted: the source's results enter the study (capability ordering or published substitution values). Admitted as method: the source defines a technique the study implements, but its numbers are not used as evidence. Context only: cited for background, no number used. Excluded sources are kept in the record so the screening can be audited.
+| Source | Used for | Content (Table 1) | Relevance to training | Recency | Model scale | Decision |
+|---|---|---|---|---|---|---|
+| He, Sun, et al. (2024) | Capability evidence | 3: removing a component | Adaptable: layers dropped from pretrained models | 2021 or later | Llama-2 13B and 70B, Mistral 7B | Admitted |
+| He and Hofmann (2024) | Capability evidence | 3: simplifying a component | Training: simplified blocks trained from scratch | 2021 or later | 18-block, width-768 decoder; Crammed BERT | Admitted |
+| Haviv et al. (2022) | Capability evidence; removing positional encoding | 3: removing a component | Training: language models trained without positional encoding | 2021 or later | 247M; 1.3B | Admitted |
+| Kazemnejad et al. (2023) | Capability evidence (supporting); removing positional encoding | 3: removing a component | Training: models trained with each encoding | 2021 or later | 1.3B | Admitted |
+| Zhu et al. (2025) | Capability evidence | 3: replacing a component | Training: LLaMA pretrained without normalization layers | 2021 or later | LLaMA 7B to 70B | Admitted |
+| H. W. Chung et al. (2021) | Capability evidence | 3: shrinking a component | Training: multilingual pretraining | 2021 or later | 12-layer, width-768 encoder | Admitted |
+| Ainslie et al. (2023) | Capability evidence; grouped-query attention | 3: reducing key-value heads; 1: timing | Inference timing, with a stated path to training (uptraining) | 2021 or later | T5-Large, T5-XXL | Admitted |
+| Lan et al. (2020) | Capability evidence; factorized embedding | 3: factorizing a component | Training: pretraining | Before 2021, seminal exception | ALBERT-base | Admitted |
+| Michel et al. (2019) | Capability evidence | 3: pruning attention heads | Adaptable: heads pruned from trained models | Before 2021, not an exception | BERT; WMT Transformer | Excluded (recency) |
+| Press and Wolf (2017) | Capability evidence (supporting) | 3: tying the embeddings | Training | Before 2021, not an exception | LSTM language models | Excluded (recency) |
+| Geva et al. (2021) | Context | None quantitative (mechanism only) | Not applicable | 2021 or later | Not reported | Context only |
+| Brody et al. (2023) | Context | None quantitative for model quality | Not applicable | 2021 or later | Not reported | Context only |
+| Rabe and Staats (2021) | Memory-efficient attention | 1: memory and runtime | Training: backward pass measured | 2021 or later | Not reported | Admitted |
+| Lefaudeux et al. (2022) | Memory-efficient attention kernel | Kernel implementation | Training and inference | 2021 or later | Not reported | Admitted as method |
+| Katharopoulos et al. (2020) | Linear attention | 1: timing | Training: time per epoch | Before 2021, seminal exception | Not reported | Admitted as method |
+| Shazeer (2019) | Origin of grouped-query attention (multi-query attention) | 1: timing | Inference only (decoding) | Before 2021, seminal exception | WMT14 Transformer | Admitted as method |
+| Zhang and Sennrich (2019) | Root mean square normalization | 1: running time | Training: running time per 1,000 steps | Before 2021, seminal exception | Transformer and others | Admitted as method |
+| Hsu et al. (2024) | Fused normalization and rotary kernels | 1: kernel speed and memory | Adaptable: kernels for language-model training | 2021 or later | Kernel benchmark | Admitted |
+*Note.* Admitted: the source's results enter the study (capability ordering or published substitution values). Admitted as method: the source defines a technique the study implements, but its numbers are not used as evidence. Context only: cited for background, no number used. Excluded sources are kept in the record so the screening can be audited. All sources are publicly accessible through scholarly repositories, one of them as a preprint (He, Sun, et al., 2024), except Lefaudeux et al. (2022), which is an official vendor code repository.
 
 ## A4. Four references added (61 to 65)
 

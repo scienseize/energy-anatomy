@@ -2,13 +2,15 @@
 
 Draft, 2026-10-19, for Bill's review. Nothing goes into the Google Doc until approved. Every number comes from run 3 (`data/tables/T4.csv`, `T5.csv`, `T6.csv`, `TA2_dynamic_rule.csv`, `TA3_normalized_rule.csv`) or from `docs/methods.md` sections 13, 15 and 17; the trace at the end lists the source of each.
 
-The conceptual framework says the first research question "describes the distributions C2 and C3 measure, and with them tests the hypothesis", so this section reports the shares, the analytical check, and the H1 decision. The full waste profile (C4 ranks, Table 7, Figure 7) is left for RQ2.
+The conceptual framework says the first research question "describes the distributions C2 and C3 measure, and with them tests the hypothesis", so this section reports the shares, the analytical check, and the H1 decision. The full waste profile (C4 ranks, Table 7, Figure 6) is left for RQ2.
 
-## Open questions for Bill
+## Decisions (Bill, 2026-10-19)
 
-1. **Table and figure numbers.** The draft uses the repo's numbers (Table 4, 5, 6; Figure 5). The manuscript currently has Table 1 and Figures 1 to 3 only. Table 3 (the screening record) is cited in Chapter II but is not in the doc yet, and nothing occupies Table 2 or Figure 4. Options: (a) add Table 2 (the 18 configurations, repo T2) under Population and Sampling and Table 3, and renumber the figures so Chapter III starts at Figure 4; (b) renumber everything in order of appearance.
-2. **Body table.** The full T5 has 180 rows (18 configurations x 10 rows). The draft puts a condensed Table 5 in the body (one row per component, ranges over the 18 configurations) and moves the full T5 to an appendix. Alternatively, the body could show a smaller selection of configurations.
-3. **Cross-entropy loss.** It is not one of the five RQ1 components but it is measured and memory-bound. The draft reports it in one sentence and leaves it out of the H1 test, as Chapter II does. Keep it that way?
+1. **Numbering:** Table 2 (the sampled models and configurations) and Table 3 (the screening record) are added to Chapter II (drafted in `docs/chapter2_tables_draft.md`), so the repo's table numbers hold in the manuscript. Figures are renumbered from Figure 4: repo F5 is Figure 4, F6 is Figure 5, F7 is Figure 6, F8 is Figure 7, F9 is Figure 8, F10 is Figure 9.
+2. **Order:** the analytical check comes first in RQ1, so Table 4 is cited before Table 5.
+3. **Body tables:** Tables 4 and 5 are condensed to one row per component; the full tables go to an appendix.
+4. **Loss:** reported, not tested.
+5. **Roofline figure:** repo F6 appears in RQ1 as Figure 5, in the hypothesis test. Its legend still uses code names (embed_lookup, attn_core); relabel before it goes into the doc.
 
 ---
 
@@ -16,7 +18,26 @@ The conceptual framework says the first research question "describes the distrib
 
 ### Research Question 1: How is pretraining energy distributed across the components?
 
-All results in this chapter come from the main profiling run (run 3): eighteen configurations, ten matched passes each, on one T4 GPU in one session. Two earlier full runs on two other T4 GPUs are used to check that the results repeat. Shares are medians over the ten passes. Across passes, the interquartile range of a component's energy share was at most 3.8 percentage points (feedforward) and below 0.2 points for layer normalization, positional encoding, the embedding lookup and the loss, so the medians reported below are stable at the precision given. Table 5 summarizes the compute share (C2) and the measured energy share (C3) of each component across the eighteen configurations, and Figure 5 plots the two shares side by side for every configuration.
+All results in this chapter come from the main profiling run (run 3): eighteen configurations, ten matched passes each, on one T4 GPU in one session. Two earlier full runs on two other T4 GPUs are used to check that the results repeat. Shares are medians over the ten passes. Across passes, the interquartile range of a component's energy share was at most 3.8 percentage points (feedforward) and below 0.2 points for layer normalization, positional encoding, the embedding lookup and the loss, so the medians reported below are stable at the precision given.
+
+**Analytical check.** Before the measured shares are reported, they are checked against the analytical estimate. The estimate, built from each component's predicted roofline time (Williams et al., 2009) and the measured power of its roofline class, ranks the eight measured components (the five components, with attention and the token embeddings each split in two, plus the loss) in nearly the same order as the measurement (Table 4). The Spearman rank correlation between the two orderings was 1.0 in 12 configurations, 0.976 in 5 (all FP16) and 0.952 in the remaining one (Pythia 6.9B, 2,048 tokens, FP16), and the same values were obtained in all three runs. The median absolute difference between estimated and measured shares was 0.9 percentage points. The largest differences were for the attention core (median 4.1 points, at most 14.8 points at Pythia 160M, 1,024 tokens, FP16) and the feedforward sublayer (median 5.2 points, at most 9.8). The analytical model therefore gets the order of the components right but not the size of the attention core's share, which is the quantity the profiling exists to measure.
+
+**Table 4.** Analytical estimate against measured energy share, absolute difference per component over the eighteen configurations (full table in Appendix [X])
+
+| Component | Median absolute difference | Largest absolute difference |
+|---|---|---|
+| Input embedding lookup | 0.02 points | 0.06 points (160M, 512, FP16) |
+| Layer normalization | 0.09 points | 0.45 points (6.9B, 1,024, FP16) |
+| Attention projections | 2.6 points | 4.9 points (6.9B, 512, FP32) |
+| Positional encoding | 0.9 points | 2.3 points (1.4B, 512, FP16) |
+| Attention core | 4.1 points | 14.8 points (160M, 1,024, FP16) |
+| Feedforward | 5.2 points | 9.8 points (160M, 512, FP16) |
+| Output projection | 1.8 points | 5.8 points (160M, 1,024, FP16) |
+| Cross-entropy loss | 0.3 points | 4.1 points (160M, 512, FP16) |
+
+*Note.* Both shares are taken over the eight components, so each side sums to 100%. Spearman rank correlation between the two orderings: 1.0 in 12 configurations, 0.976 in 5, 0.952 in 1.
+
+Table 5 summarizes the compute share (C2) and the measured energy share (C3) of each component across the eighteen configurations, and Figure 4 plots the two shares side by side for every configuration.
 
 **Table 5.** Compute share (C2) and measured energy share (C3) per component, median of ten passes, range over the eighteen configurations (full table in Appendix [X])
 
@@ -35,7 +56,7 @@ All results in this chapter come from the main profiling run (run 3): eighteen c
 
 *Note.* C2 is computed from the architecture and does not change with precision. Unattributed energy is the model's total energy minus the sum of the components measured in isolation.
 
-**Figure 5.** Compute share and energy share per component, for each of the eighteen configurations (repo `data/figures/F5`).
+**Figure 4.** Compute share and energy share per component, for each of the eighteen configurations (repo `data/figures/F5`).
 
 **1.1 Attention.** Taken as a whole, attention used 29.2% to 62.7% of measured energy against a compute share of 28.4% to 41.1%, and its energy share exceeded its compute share in 15 of the 18 configurations, all except the three Pythia 6.9B FP32 configurations. The whole-attention figure hides two opposite behaviors. The attention projections, the matrix multiplications that produce the queries, keys and values (fused into one in the Pythia models) and the attention output, used less energy than their compute share in every configuration (7.9% to 28.6% of energy against 17.5% to 31.6% of compute). The attention core, the score computation, mask, softmax and weighting, used more in every configuration, by a factor of 1.2 to 3.4. Its share grew with sequence length and was largest in FP16 and at the smallest model, peaking at 54.9% of all energy at Pythia 160M, sequence length 2,048, FP16, against a compute share of 23.7%. At that configuration and at two others (160M at 1,024 in FP16, and 160M at 2,048 in FP32) the attention core was the single largest consumer of energy in the model.
 
@@ -51,9 +72,9 @@ The cross-entropy loss, measured as its own component, used 0.04% to 4.39% of en
 
 The configuration moderators shift these shares in a consistent direction. Larger models move energy toward the feedforward sublayer and away from the attention core, the output projection, positional encoding, the embedding lookup and the loss; layer normalization's share falls from 160M to 1.4B but not consistently beyond. Longer sequences move energy into the attention core: its work per sequence grows with the square of the sequence length, so at a fixed 8,192 tokens per pass its arithmetic doubles each time the sequence length doubles, while the other components' arithmetic stays the same. FP16 raises the share of every memory-bound component relative to FP32: halving the precision halves the bytes these components move, but the T4's tensor cores raise the matrix-multiplication peak about eightfold, so the matrix multiplications speed up far more than the memory-bound components do. How these shifts change the ranking of components is taken up under RQ3.
 
-**Analytical check.** The analytical estimate, built from each component's predicted roofline time (Williams et al., 2009) and the measured power of its roofline class, ranks the eight components in nearly the same order as the measurement (Table 4). The Spearman rank correlation between the two orderings was 1.0 in 12 configurations, 0.976 in 5 (all FP16) and 0.952 in the remaining one (Pythia 6.9B, 2,048 tokens, FP16), and the same values were obtained in all three runs. The median absolute difference between estimated and measured shares was 0.9 percentage points. The largest differences were for the attention core (median 4.1 points, at most 14.8 points at Pythia 160M, 1,024 tokens, FP16) and the feedforward sublayer (median 5.2 points, at most 9.8). The analytical model therefore gets the order of the components right but not the size of the attention core's share, which is the quantity the profiling exists to measure.
+**Hypothesis test.** Four units of the five components are memory-bound in all eighteen configurations: the attention core, layer normalization, positional encoding and the input embedding lookup. The attention projections, the feedforward sublayer and the output projection are compute-bound in all eighteen and are not tested. The cross-entropy loss is also memory-bound but is not one of the five components under study, so it is reported but not tested. Figure 5 shows their positions on the T4's roofline: every point for these four components lies left of the ridge in both precisions. Table 6 applies the decision rule. Each of the four memory-bound components had a positive diagnostic waste score (C4 > 0) that exceeded its interquartile range across passes in all eighteen configurations, so H1 is supported and H0 is rejected for each of them.
 
-**Hypothesis test.** Four units of the five components are memory-bound in all eighteen configurations: the attention core, layer normalization, positional encoding and the input embedding lookup. The attention projections, the feedforward sublayer and the output projection are compute-bound in all eighteen and are not tested. The cross-entropy loss is also memory-bound but is not one of the five components under study, so it is reported but not tested. Table 6 applies the decision rule. Each of the four memory-bound components had a positive diagnostic waste score (C4 > 0) that exceeded its interquartile range across passes in all eighteen configurations, so H1 is supported and H0 is rejected for each of them.
+**Figure 5.** Analytical roofline position of each component in every configuration, FP32 and FP16 (repo `data/figures/F6`). *Note.* The FP16 CUDA-core peak is assumed to be twice the FP32 rate (16.2 TFLOP/s), since no NVIDIA document states it; if it equaled the FP32 rate, no component's memory-bound classification would change.
 
 **Table 6.** Decision rule for the memory-bound components (run 3, total energy)
 
@@ -97,6 +118,7 @@ Three features of the setup bound these conclusions. First, the T4 was held by i
 | Unattributed -2.8% to +4.8%, median 1.0%, negative in 5 | T5.csv unattributed rows; methods.md section 15 |
 | Memory-bound small components at most about 7% together | T5.csv: ln + rope + embed_lookup max 0.0238 + 0.0425 + 0.0020 at 160M/512/FP16 = 6.8% |
 | Tensor-core peak about eightfold | methods.md 4.4: FP16 tensor 65 TFLOP/s vs FP32 8.1 TFLOP/s |
+| Table 4 per-component differences | `data/tables/T4.csv`, abs_diff grouped by component |
 | Spearman 1.0 / 0.976 / 0.952; median abs diff 0.009; attn_core 0.041, max 0.148; mlp 0.052, max 0.098 | `data/tables/T4.csv`; methods.md section 15 |
 | Table 6 counts and verdicts | `data/tables/T6.csv` |
 | Smallest median C4 per tested component | `data/derived/shares_summary.csv` c4_med (lookup 5.4e-05); methods.md section 15 |

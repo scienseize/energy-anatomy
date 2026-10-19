@@ -10,6 +10,10 @@ PASSES = DATA / "raw" / "passes.csv"
 # Validated categorical order (dataviz reference palette), fixed per component.
 COLORS = dict(zip(COMPONENTS, ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"]))
 MARKERS = dict(zip(COMPONENTS, "osD^v<>P"))  # secondary encoding, so identity isn't color-only
+# Manuscript names for figure labels; figure numbers and titles live in the manuscript captions.
+LABELS = dict(zip(COMPONENTS, ["Input embedding lookup", "Layer normalization", "Attention projections",
+                               "Positional encoding (RoPE)", "Attention core", "Feedforward", "Output projection",
+                               "Cross-entropy loss"]))
 
 
 def write_table(name: str, rows: list[dict]) -> None:
@@ -81,14 +85,13 @@ def f6(analytical: Path = DATA / "derived" / "analytical.csv") -> None:
             # attainable = F / t_hat
             perf = np.array([float(r["flops"]) / float(r["t_hat"]) for r in pts])
             ax.scatter(c1, perf / 1e12, s=28, color=COLORS[c], marker=MARKERS[c], edgecolor="white",
-                       linewidth=0.8, label=c, zorder=3)
+                       linewidth=0.8, label=LABELS[c], zorder=3)
         ax.set(xscale="log", yscale="log", title=prec.upper(), xlabel="C1 = FLOPs / bytes (FLOP/B)")
         ax.grid(True, which="major", color="#e5e4de", lw=0.6)
         ax.spines[["top", "right"]].set_visible(False)
     axes[0].set_ylim(top=400)
     axes[0].set_ylabel("attainable TFLOP/s (analytical)")
     axes[1].legend(fontsize=8, frameon=False, loc="lower right")
-    fig.suptitle("F6. Roofline position of baseline components, T4 (all models and sequence lengths)", fontsize=10)
     fig.tight_layout()
     FIGURES.mkdir(parents=True, exist_ok=True)
     for ext in ("png", "svg"):
@@ -113,7 +116,7 @@ def _grid_panels(summary_csv: Path):
         for j, (s, p) in enumerate(cols):
             sel = {r["component"]: r for r in rows if (r["model"], r["seq_len"], r["precision"]) == (m, s, p)}
             ax = axes[i, j]
-            ax.set_title(f"{m.removeprefix('pythia-')} · {s} · {p.upper()}", fontsize=8.5)
+            ax.set_title(f"Pythia {m.removeprefix('pythia-').upper()} · {s} · {p.upper()}", fontsize=8.5)
             ax.spines[["top", "right"]].set_visible(False)
             ax.grid(True, axis="x", color="#e5e4de", lw=0.6)
             ax.set_axisbelow(True)
@@ -135,13 +138,12 @@ def f5(summary_csv: Path = DATA / "derived" / "shares_summary.csv") -> None:
         ax.barh(y + 0.2, c2, height=0.38, color="#b4b2a9", label="C2 compute share (analytical)")
         ax.barh(y - 0.2, c3, height=0.38, color="#2a78d6", xerr=err, error_kw={"lw": 0.8, "ecolor": "#0d366b"},
                 label="C3 energy share (measured median, IQR)")
-    axes[0, 0].set_yticks(y, COMPONENTS)
+    axes[0, 0].set_yticks(y, [LABELS[c] for c in COMPONENTS])
     for ax in axes[-1]:
         ax.set_xlabel("share of model total", fontsize=8)
     fig.legend(*axes[0, 0].get_legend_handles_labels(), loc="upper center", ncol=2, fontsize=8.5,
-               frameon=False, bbox_to_anchor=(0.5, 0.965))
-    fig.suptitle("F5. Compute share vs energy share per component, Pythia on T4 (rows: model; columns: sequence length, precision)", fontsize=10, y=0.995)
-    fig.tight_layout(rect=(0, 0, 1, 0.94))
+               frameon=False, bbox_to_anchor=(0.5, 1.0))
+    fig.tight_layout(rect=(0, 0, 1, 0.96))
     for ext in ("png", "svg"):
         fig.savefig(FIGURES / f"F5.{ext}", dpi=200)
     plt.close(fig)

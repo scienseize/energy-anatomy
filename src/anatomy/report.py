@@ -161,11 +161,10 @@ def f7(summary_csv: Path = DATA / "derived" / "shares_summary.csv") -> None:
         ax.barh(y, c4, height=0.7, color=np.where(c4 > 0, "#e34948", "#2a78d6"), xerr=err,
                 error_kw={"lw": 0.8, "ecolor": "#2c2c2a"})
         ax.axvline(0, color="#5f5e5a", lw=0.8)
-    labels = [c + (" *" if panels[0][1][c]["memory_bound"] == "True" else "") for c in COMPONENTS]
+    labels = [LABELS[c] + (" *" if panels[0][1][c]["memory_bound"] == "True" else "") for c in COMPONENTS]
     axes[0, 0].set_yticks(y, labels)
     for ax in axes[-1]:
         ax.set_xlabel("C4 = C3 − C2", fontsize=8)
-    fig.suptitle("F7. Waste score C4 per component (red: energy share exceeds compute share; * memory-bound in every config)", fontsize=10)
     fig.tight_layout()
     for ext in ("png", "svg"):
         fig.savefig(FIGURES / f"F7.{ext}", dpi=200)

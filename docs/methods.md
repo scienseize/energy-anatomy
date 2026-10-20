@@ -420,7 +420,7 @@ All values come from run 3 (`data/derived/shares_summary.csv`, tables T4 to T7).
 | rope | 18/18 | +0.0040 to +0.0424 | 18 | 2 to 3 | 3.8e-09 to 6.7e-09 |
 | ln (pooled) | 18/18 | +0.0022 to +0.0232 | 18 | 3 to 4 | 2.7e-10 to 4.7e-10 |
 | loss | 18/18 | +0.0004 to +0.0433 | 18 | 2 to 5 | 5.2e-10 to 1.0e-09 |
-| embed_lookup | 18/18 | +0.0001 to +0.0020 | 18 | 5 to 6 | 1.1e-08 to 1.9e-08 |
+| embed_lookup | 18/18 | +0.00005 to +0.0020 | 18 | 5 to 6 | 1.1e-08 to 1.9e-08 |
 | mlp | 0/18 | -0.1757 to +0.0679 | 3 | 1 to 8 | 3.7e-12 to 3.1e-11 |
 | out_proj | 0/18 | -0.1229 to +0.0082 | 7 | 4 to 7 | 4.4e-12 to 2.4e-11 |
 | attn_proj | 0/18 | -0.0958 to -0.0128 | 0 | 6 to 8 | 3.7e-12 to 2.3e-11 |
@@ -498,7 +498,7 @@ The three full runs ran on three different physical T4 GPUs (Section 13) with id
 - **Absolute energy is GPU-specific.** Between runs 1 and 2, the ratio of pass-0 energy per repetition had a median of 0.914 and ranged from 0.555 to 1.063 across (configuration, unit). Absolute joules are not comparable across sessions (limitation 9).
 - **Verdicts are identical.** All four tested components are supported in 18 of 18 configurations in every run, under total energy, dynamic energy and the normalized check.
 - **Tested components' C4 is stable.** The largest range of median C4 across the three runs is 0.0002 for embed_lookup, 0.0059 for ln, 0.0050 for rope, 0.0057 for loss and 0.0169 for attn_core.
-- **Reported-only components near zero are not stable.** Across the three runs, C4 disagrees in sign for 9 (configuration, component) pairs, all of them mlp or out_proj. The largest ranges are mlp 0.070, attn_proj 0.040 and out_proj 0.011. At 6.9B FP32, mlp's C4 is positive and rank 1 in all three configurations in runs 1 and 3, but -0.002 to +0.012 in run 2. Statements about compute-bound components' C4 should report this spread.
+- **Reported-only components near zero are not stable.** Across the three runs, C4 disagrees in sign for 9 (configuration, component) pairs, all of them mlp or out_proj. The largest ranges are mlp 0.069 (6.9B/512/FP32), attn_proj 0.040 and out_proj 0.011. At 6.9B FP32, mlp's C4 is positive and rank 1 in all three configurations in runs 1 and 3, but -0.002 to +0.012 in run 2. Statements about compute-bound components' C4 should report this spread.
 - **Ranks.** attn_core is rank 1 in 15 configurations in runs 1 and 3 and in all 18 in run 2; where it is not first, mlp is (6.9B FP32).
 - **Unattributed** ranges from -6.7% to +4.3% (8 negative) in run 1, -1.6% to +4.1% (3 negative) in run 2 and -2.8% to +4.8% (5 negative) in run 3.
 - **Validation** (Spearman rho) is identical in all three runs: 1.0 in 12 configurations, 0.976 in 5 and 0.952 in 1.

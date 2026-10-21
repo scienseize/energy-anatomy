@@ -1,6 +1,6 @@
 # Chapter III draft, part 3: RQ3, capability overlay and configuration moderators
 
-Draft, 2026-10-21, for Bill's review. Nothing goes into the Google Doc until approved. Every number comes from run 3 (`data/tables/T8.csv`, `data/derived/rank_shifts.csv`, `data/derived/shares_summary.csv`), the capability evidence in `data/manual/capability.csv` (checked against the primary sources on 2026-10-17), or `docs/methods.md` section 18; the trace at the end lists the source of each. Same conventions as RQ1 and RQ2. Repo F8 is Figure 7 and repo F9 is Figure 8, both relabelled with the manuscript's component names.
+**Applied to the Google Doc on 2026-10-21 after Bill approved it (both open questions kept as drafted)**, after the last RQ2 paragraph; text verified paragraph by paragraph against this file, Table 8 cell by cell (set in 8 pt), Figures 7 and 8 inserted from commit 2fff895, rendered pages checked. Draft, 2026-10-21. Every number comes from run 3 (`data/tables/T8.csv`, `data/derived/rank_shifts.csv`, `data/derived/shares_summary.csv`), the capability evidence in `data/manual/capability.csv` (checked against the primary sources on 2026-10-17), or `docs/methods.md` section 18; the trace at the end lists the source of each. Same conventions as RQ1 and RQ2. Repo F8 is Figure 7 and repo F9 is Figure 8, both relabelled with the manuscript's component names.
 
 ## Open questions for Bill
 

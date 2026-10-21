@@ -17,7 +17,7 @@ The hypothesis verdicts were reported under RQ1; this section reports the full w
 
 The diagnostic waste score of a component, C4, is its energy share minus its compute share, computed pass by pass and summarized by the median over the ten passes. A positive score means the component used a larger share of the model's energy than of its arithmetic; a negative score means a smaller share. Because a component's energy is measured in isolation and the model's total is composed from those measurements, the energy shares, and therefore the scores, are estimates of the shares inside a full training step. The scores of all components in a configuration sum to minus the unattributed energy, so they are close to zero-sum: one component's positive divergence is matched by negative divergence elsewhere. Table 7 summarizes the scores across the eighteen configurations, and Figure 6 shows them for every configuration.
 
-**Table 7.** Diagnostic waste score (C4) per component, median of ten passes, over the eighteen configurations (full table in Appendix D)
+**Table 7.** Diagnostic waste score (C4) per component, median of ten passes, over the eighteen configurations (full table: Table D3 in Appendix D)
 
 | Component | Roofline class | C4 range | C4 median | Configurations with C4 > 0 | Rank within configuration | Energy per FLOP, relative to feedforward |
 |---|---|---|---|---|---|---|

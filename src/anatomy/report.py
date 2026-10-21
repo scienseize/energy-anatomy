@@ -11,6 +11,14 @@ PASSES = DATA / "raw" / "passes.csv"
 COLORS = dict(zip(COMPONENTS, ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"]))
 MARKERS = dict(zip(COMPONENTS, "osD^v<>P"))  # secondary encoding, so identity isn't color-only
 # Manuscript names for figure labels; figure numbers and titles live in the manuscript captions.
+SUB_LABELS = {"sdpa_core": "Memory-efficient attention (replaces the attention core)",
+              "linear_core": "Linear attention (replaces the attention core)",
+              "gqa_proj": "Grouped-query attention (replaces the attention projections)",
+              "factorized_embed": "Factorized embedding (replaces the input lookup and output projection)",
+              "rmsnorm": "RMSNorm, separate operators (replaces layer normalization)",
+              "rmsnorm_fused": "RMSNorm, fused (replaces layer normalization)",
+              "rope_fused": "Fused rotary encoding (replaces positional encoding)",
+              "nope": "No positional encoding, computed (removes positional encoding)"}
 LABELS = dict(zip(COMPONENTS, ["Input embedding lookup", "Layer normalization", "Attention projections",
                                "Positional encoding (RoPE)", "Attention core", "Feedforward", "Output projection",
                                "Cross-entropy loss"]))
@@ -184,7 +192,7 @@ def f10(t10_csv: Path = TABLES / "T10.csv") -> None:
         rows = list(csv.DictReader(f))
     subs = list(dict.fromkeys(r["substitution"] for r in rows))
     cfgs = list(dict.fromkeys((r["model"], r["seq_len"], r["precision"]) for r in rows))
-    labels = [f"{m.removeprefix('pythia-')}·{s}·{p.upper()}" for m, s, p in cfgs]
+    labels = [f"{m.removeprefix('pythia-').upper()} {s} {p.upper()}" for m, s, p in cfgs]
     fig, axes = plt.subplots(len(subs), 1, figsize=(12, 2.1 * len(subs)), sharex=True)
     x = np.arange(len(cfgs))
     for ax, sub in zip(axes, subs):
@@ -194,14 +202,13 @@ def f10(t10_csv: Path = TABLES / "T10.csv") -> None:
         ax.bar(x, d, width=0.7, color=np.where(d > 0, "#2a78d6", "#e34948"), yerr=err,
                error_kw={"lw": 0.8, "ecolor": "#2c2c2a"})
         ax.axhline(0, color="#5f5e5a", lw=0.8)
-        ax.set_title(f"{sub} (replaces {by[cfgs[0]]['replaces']})", fontsize=9, loc="left")
-        ax.set_ylabel("ΔE_model (%)", fontsize=8)
+        ax.set_title(SUB_LABELS.get(sub, sub), fontsize=9, loc="left")
+        ax.set_ylabel("model energy\nsaved (%)", fontsize=8)
         ax.tick_params(labelsize=8)
         ax.grid(True, axis="y", color="#e5e4de", lw=0.6)
         ax.set_axisbelow(True)
         ax.spines[["top", "right"]].set_visible(False)
     axes[-1].set_xticks(x, labels, rotation=60, ha="right")
-    fig.suptitle("F10. Change in model energy per substitution, % of baseline (blue: saving; red: costs more)", fontsize=10)
     fig.tight_layout()
     FIGURES.mkdir(parents=True, exist_ok=True)
     for ext in ("png", "svg"):

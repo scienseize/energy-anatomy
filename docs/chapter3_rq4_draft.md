@@ -17,7 +17,7 @@ Each substitution was chosen to address the reason its component wastes energy, 
 
 **Table 9.** Candidate substitutions, the cost mechanism each targets, and its predicted memory traffic relative to the component it replaces
 
-| Component (RQ3 quadrant) | Cost mechanism | Substitution | Same function | Predicted memory traffic | Source |
+| Component (quadrant) | Cost mechanism | Substitution | Same function | Predicted memory traffic | Source |
 |---|---|---|---|---|---|
 | Positional encoding (priority: high waste, low capability) | Six separate elementwise operators, each reading and writing the queries and keys | Rotary encoding compiled into one forward and one backward kernel | Yes | 0.29 times | Hsu et al. (2024) |
 | Positional encoding (priority: high waste, low capability) | As above | Removal of positional encoding | No | None | Haviv et al. (2022); Kazemnejad et al. (2023) |

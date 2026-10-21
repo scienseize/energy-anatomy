@@ -137,7 +137,7 @@ def f5(summary_csv: Path = DATA / "derived" / "shares_summary.csv") -> None:
         err = [float(sel[c]["c3_iqr"]) / 2 for c in COMPONENTS]
         ax.barh(y + 0.2, c2, height=0.38, color="#b4b2a9", label="C2 compute share (analytical)")
         ax.barh(y - 0.2, c3, height=0.38, color="#2a78d6", xerr=err, error_kw={"lw": 0.8, "ecolor": "#0d366b"},
-                label="C3 energy share (measured median, IQR)")
+                label="C3 energy share (measured median; whiskers ±IQR/2)")
     axes[0, 0].set_yticks(y, [LABELS[c] for c in COMPONENTS])
     for ax in axes[-1]:
         ax.set_xlabel("share of model total", fontsize=8)

@@ -387,6 +387,35 @@ def _fmt(rows: list[dict], digits: int = 4) -> list[dict]:
     return [{k: f(v) for k, v in r.items()} for r in rows]
 
 
+D_COLS = {"embed_lookup": "Lookup", "ln": "LN", "attn_proj": "Attn proj", "rope": "RoPE", "attn_core": "Attn core",
+          "mlp": "FFN", "out_proj": "Out proj", "loss": "Loss", "unattributed": "Unattr."}
+D_NAMES = {"embed_lookup": "Input embedding lookup", "ln": "Layer normalization", "rope": "Positional encoding",
+           "attn_core": "Attention core"}
+
+
+def appendix_d(summary: list[dict], t4: list[dict], rule_dyn: list[dict], rule_norm: list[dict]) -> dict:
+    """Manuscript Appendix D: full Tables 4, 5 and 7 pivoted to one row per configuration (D1-D3) and the
+    decision rule on dynamic energy and on normalized shares (D4, D5). Values are preformatted strings."""
+    def pivot(rows, cell, comps):
+        out = {}
+        for r in sorted(rows, key=grid_order):
+            key = f"{r['model'].removeprefix('pythia-').upper()}, {r['seq_len']}, {r['precision'].upper()}"
+            out.setdefault(key, {"Configuration": key})[D_COLS[r["component"]]] = cell(r)
+        return [{"Configuration": k, **{D_COLS[c]: v[D_COLS[c]] for c in comps}} for k, v in out.items()]
+    d1 = pivot(t4, lambda r: f"{100 * r['abs_diff']:.2f}", COMPONENTS)
+    rho = {f"{r['model'].removeprefix('pythia-').upper()}, {r['seq_len']}, {r['precision'].upper()}": r["spearman_rho"] for r in t4}
+    for r in d1:
+        r["Spearman rho"] = f"{rho[r['Configuration']]:.3f}"
+    d2 = pivot(summary, lambda r: f"{100 * r['c3_med']:.3f} ({100 * r['c3_iqr']:.3f})", (*COMPONENTS, "unattributed"))
+    d3 = pivot([r for r in summary if r["component"] != "unattributed"],
+               lambda r: f"{r['c4_med']:+.5f} ({r['c4_iqr']:.5f})", COMPONENTS)
+    def rule(rows):
+        return [{"Component": D_NAMES[r["component"]], "Memory-bound configurations": r["memory_bound"],
+                 "C4 > 0": r["c4_pos"], "C4 > IQR": r["c4_above_iqr"], "Both": r["both"],
+                 "Verdict": "H1 supported" if r["verdict"] == "supported" else "H1 not supported"} for r in rows]
+    return {"D1": d1, "D2": d2, "D3": d3, "D4": rule(rule_dyn), "D5": rule(rule_norm)}
+
+
 def run(passes_csv: Path = RAW / "passes.csv", idle_csv: Path = RAW / "idle.csv",
         analytical_csv: Path = DERIVED / "analytical.csv", n_passes: int = 10) -> dict:
     analytical = _read(analytical_csv)
@@ -418,7 +447,9 @@ def run(passes_csv: Path = RAW / "passes.csv", idle_csv: Path = RAW / "idle.csv"
     for name, rows in (("T4", t4), ("T5", t5), ("T6", t6), ("T7", t7), ("TA1_dynamic", ta),
                        ("TA2_dynamic_rule", ta_rule), ("TA3_normalized_rule", tn_rule)):
         write_table(name, _fmt(rows))
-    manual = {r["substitution"]: r for r in _read(MANUAL)} if MANUAL.exists() else {}
+    for name, rows in appendix_d(summary, t4, ta_rule, tn_rule).items():
+        write_table(name, rows)
+    manual ={r["substitution"]: r for r in _read(MANUAL)} if MANUAL.exists() else {}
     deltas = substitution_deltas(passes, _read(idle_csv), analytical, n_passes)
     t10 = summarize_substitutions(deltas, analytical, manual)
     t9 = priority_table(summary, t6, manual)

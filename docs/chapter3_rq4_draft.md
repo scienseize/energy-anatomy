@@ -1,6 +1,6 @@
 # Chapter III draft, part 4: RQ4, substitutions matched to cost mechanisms
 
-Draft, 2026-10-21, for Bill's review. Nothing goes into the Google Doc until approved. Sources: `data/manual/substitutions.csv` (mechanism and source per substitution), `data/tables/T9.csv`, `data/derived/analytical.csv` (predicted bytes and FLOPs, before any measurement), `docs/methods.md` sections 3, 4.1, 9 and 16. The measured savings are left for RQ5 (Table 10, Figure 9). Same conventions as the earlier parts.
+**Applied to the Google Doc on 2026-10-21 after Bill approved it (both open questions kept as drafted)**, after the last RQ3 paragraph; text verified paragraph by paragraph against this file, Table 9 cell by cell (set in 8 pt), rendered pages checked. Draft, 2026-10-21. Sources: `data/manual/substitutions.csv` (mechanism and source per substitution), `data/tables/T9.csv`, `data/derived/analytical.csv` (predicted bytes and FLOPs, before any measurement), `docs/methods.md` sections 3, 4.1, 9 and 16. The measured savings are left for RQ5 (Table 10, Figure 9). Same conventions as the earlier parts.
 
 ## Open questions for Bill
 

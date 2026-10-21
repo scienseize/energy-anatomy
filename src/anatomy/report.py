@@ -233,7 +233,10 @@ def f8(t8_csv: Path = TABLES / "T8.csv") -> None:
     ax.errorbar(x, y, yerr=[lo, hi], fmt="none", ecolor="#b4b2a9", lw=1.2, capsize=3, zorder=1)
     ax.scatter(x, y, s=60, c=np.where(y > 0, "#e34948", "#2a78d6"), edgecolor="white", linewidth=1, zorder=3)
     for xi, yi, r in zip(x, y, rows):
-        ax.annotate(r["component"], (xi, yi), xytext=(8, 4), textcoords="offset points", fontsize=8.5)
+        # label placement per component so neighbouring labels at C4 near 0 do not overlap
+        dx, dy, ha = {"out_proj": (6, -14, "left"), "embed_lookup": (6, 9, "left"), "rope": (0, 10, "center"),
+                      "ln": (-6, -14, "right")}.get(r["component"], (8, 4, "left"))
+        ax.annotate(LABELS[r["component"]], (xi, yi), xytext=(dx, dy), textcoords="offset points", fontsize=8.5, ha=ha)
     kw = {"fontsize": 8, "color": "#888780", "transform": ax.transAxes}
     ax.text(0.02, 0.97, "high waste\nhigh capability", va="top", **kw)
     ax.text(0.98, 0.97, "high waste\nlow capability", va="top", ha="right", **kw)
@@ -247,7 +250,6 @@ def f8(t8_csv: Path = TABLES / "T8.csv") -> None:
     ax.set_ylabel("C4 = C3 − C2 (median over configs; whisker = range)", fontsize=9)
     ax.tick_params(labelsize=8)
     ax.spines[["top", "right"]].set_visible(False)
-    ax.set_title("F8. Waste vs capability per component (red: energy share exceeds compute share)", fontsize=10)
     fig.tight_layout()
     FIGURES.mkdir(parents=True, exist_ok=True)
     for ext in ("png", "svg"):
@@ -283,16 +285,15 @@ def f9(shifts_csv: Path = DATA / "derived" / "rank_shifts.csv") -> None:
                 ax.text(j, i, f"{v:+d}" if v else "0", ha="center", va="center", fontsize=8,
                         color="#2c2c2a" if abs(v) < 4 else "white")
         r0 = next(r for r in rows if r["moderator"] == m)
-        ax.set_title(f"{m}: {str(r0['from']).removeprefix('pythia-')} → {str(r0['to']).removeprefix('pythia-')}", fontsize=9)
-        ax.set_xticks(range(len(cols[m])), cols[m], rotation=45, ha="right", fontsize=8)
-        ax.set_yticks(range(n), COMPONENTS if ax is axes[0] else [""] * n, fontsize=8)
+        ax.set_title(f"{m.capitalize()}: {str(r0['from']).removeprefix('pythia-').upper()} to {str(r0['to']).removeprefix('pythia-').upper()}", fontsize=9)
+        ax.set_xticks(range(len(cols[m])), [h.upper() for h in cols[m]], rotation=45, ha="right", fontsize=8)
+        ax.set_yticks(range(n), [LABELS[c] for c in COMPONENTS] if ax is axes[0] else [""] * n, fontsize=8)
         ax.tick_params(length=0)
         for spine in ax.spines.values():
             spine.set_visible(False)
     cb = fig.colorbar(im, ax=axes, fraction=0.02, pad=0.01)
     cb.set_label("rank change (+ = climbs toward rank 1, more waste)", fontsize=8)
     cb.ax.tick_params(labelsize=7)
-    fig.suptitle("F9. Shift in C4 rank under each configuration moderator (C5); columns: the other two factors held fixed", fontsize=10)
     FIGURES.mkdir(parents=True, exist_ok=True)
     for ext in ("png", "svg"):
         fig.savefig(FIGURES / f"F9.{ext}", dpi=200, bbox_inches="tight")

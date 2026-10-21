@@ -509,7 +509,7 @@ The three full runs ran on three different physical T4 GPUs (Section 13) with id
 ### 18.1 Method
 
 - **Capability** (Chapter II) is a component's contribution to model quality: how much loss or accuracy suffers when it is removed, simplified, reduced or replaced. The ordinal ranks (1 = largest contribution) and their evidence are in `data/manual/capability.csv`, curated by hand. Every cited number was checked against its primary source by an independent verifier agent (2026-10-17), and caveats are in the `note` column. loss is the training objective and is not ranked.
-- **Pooled waste.** For T8 and F8, each component's C4 is pooled as the median over the 18 configurations of its per-configuration median C4 (run 2), with the range over configurations as the whisker.
+- **Pooled waste.** For T8 and F8, each component's C4 is pooled as the median over the 18 configurations of its per-configuration median C4 (run 3), with the range over configurations as the whisker.
 - **Quadrant** (decision 30). Waste is split at C4 = 0 (positive = high waste). Capability is split at the median rank of the ranked components. With 7 ranked components the median rank is 4 (embed_lookup), which is placed in the lower-capability half, so high capability = ranks 1 to 3.
 - **C5 rank shifts** (decision 28; `rank_shifts` in `analysis.py`, `data/derived/rank_shifts.csv`). For each moderator, each pair of configurations that differ only in that moderator is compared: scale 160M to 6.9B (6 pairs), sequence length 512 to 2048 (6 pairs), precision FP32 to FP16 (9 pairs). shift = rank_from - rank_to, so a positive shift means the component climbs toward rank 1 (more waste relative to the others).
 
